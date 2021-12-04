@@ -19,7 +19,7 @@ Example:
     "targetRepoPath": "my-open-source-repo",
     "sourceRepoPath": ".",
     "allowedPaths": ["apps/service1/*"],
-    "ignorePaths": ["apps/service1/.env", "apps/optional-secure-service2", "gitexporter.config.json"]
+    "ignoredPaths": ["apps/service1/.env", "apps/optional-secure-service2", "gitexporter.config.json"]
 }
 ```
 

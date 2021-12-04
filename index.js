@@ -89,19 +89,24 @@ async function getCommitHistory (repo) {
 }
 
 async function commitFiles (repo, author, committer, message, files) {
+    if (DEBUG) console.log('commitFiles()', files.length)
     const index = await repo.refreshIndex()
 
     for (const file of files) {
+        if (DEBUG) console.log('commitFiles() file', file.type, file.path)
         if (file.type === 3) await index.addByPath(file.path)
         else if (file.type === -1) await index.removeByPath(file.path)
     }
 
+    if (DEBUG) console.log('commitFiles() index.write()')
     await index.write()
 
+    if (DEBUG) console.log('commitFiles() index.writeTree()')
     const oid = await index.writeTree()
 
     const parent = await repo.getHeadCommit()
     const commitOid = await repo.createCommit('HEAD', author, committer, message, oid, (parent) ? [parent] : [])
+    if (DEBUG) console.log('commitFiles() done')
     return commitOid.toString()
 }
 
@@ -214,7 +219,16 @@ async function getTreeFiles (repo, hash, { withSubmodules, withDirectories } = {
 }
 
 async function writeFile (path, buffer, permission) {
-    await writeFileAtomic(path, buffer, { mode: permission })
+    const isDirectory = (permission & 0o170000) == 0o040000
+    const isNormalFile = (permission & 0o170000) == 0o100644
+    const isExecutable = (permission & 0o170000) == 0o100755
+    const isSymlink = (permission & 0o170000) == 0o120000
+    if (DEBUG) console.log('writeFile()', path, (permission & 0o170000).toString(2).substring(0, 4), (permission | 0o170000).toString(2).substring(4), isDirectory, isNormalFile, isExecutable, isSymlink)
+    if (isSymlink) {
+        await fs.promises.symlink(buffer.toString(), path)
+    } else {
+        await writeFileAtomic(path, buffer, { mode: permission })
+    }
     // let fileDescriptor
     //
     // try {
@@ -257,11 +271,12 @@ function prepareLogData (commits) {
     return result
 }
 
-async function writeLogData (logFilePath, commits, filePaths, ignoredPaths) {
+async function writeLogData (logFilePath, commits, filePaths, ignoredPaths, allowedPaths) {
     const data = JSON.stringify({
         commits: prepareLogData(commits),
         paths: [...filePaths],
         ignoredPaths: [...ignoredPaths],
+        allowedPaths: [...allowedPaths],
     }, null, 2)
     await writeFileAtomic(logFilePath, data)
 }
@@ -311,7 +326,7 @@ async function readOptions (config, args) {
     const forceReCreateRepo = options.forceReCreateRepo || false
     const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || true
     const allowedPaths = options.allowedPaths || ['*']
-    const ignorePaths = options.ignorePaths || []
+    const ignoredPaths = options.ignoredPaths || []
     return {
         dontShowTiming,
         forceReCreateRepo,
@@ -320,7 +335,7 @@ async function readOptions (config, args) {
         sourceRepoPath,
         logFilePath,
         allowedPaths,
-        ignorePaths,
+        ignoredPaths,
     }
 }
 
@@ -328,7 +343,7 @@ async function main (config, args) {
     const options = await readOptions(config, args)
 
     const time0 = Date.now()
-    const ig = ignore().add(options.ignorePaths)
+    const ig = ignore().add(options.ignoredPaths)
     const al = ignore().add(options.allowedPaths)
 
     if (options.forceReCreateRepo && fs.existsSync(options.targetRepoPath)) {
@@ -359,6 +374,7 @@ async function main (config, args) {
     let lastFollowCommit = null
     const filePaths = new Set()
     const ignoredPaths = new Set()
+    const allowedPaths = new Set()
     for (const commit of commits) {
 
         console.log(`Processing: ${++commitIndex}/${commitLength}`, commit.sha, (options.dontShowTiming) ? '' : `~${Math.round((time2 - time0) / commitIndex)}ms; ${(time2 - time1)}ms`)
@@ -389,6 +405,7 @@ async function main (config, args) {
         files.forEach(({ path }) => {
             filePaths.add(path)
             if (ig.ignores(path)) ignoredPaths.add(path)
+            if (al.ignores(path)) allowedPaths.add(path)
         })
 
         files = files.filter(({ path }) => !ig.ignores(path))
@@ -414,10 +431,10 @@ async function main (config, args) {
             allowedPaths: allowedPathsLength,
         }
 
-        await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths)
+        await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths)
     }
 
-    await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths)
+    await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths)
     console.log((options.dontShowTiming) ? 'Finish' : `Finish: total=${Date.now() - time0}ms;`)
 }
 

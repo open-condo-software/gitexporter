@@ -5,5 +5,5 @@
   "targetRepoPath": "ignore.default",
   "sourceRepoPath": ".",
   "allowedPaths": ["*"],
-  "ignorePaths": []
+  "ignoredPaths": []
 }

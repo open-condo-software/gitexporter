@@ -5,6 +5,13 @@ const exec = util.promisify(require('child_process').exec)
 
 const writeFileAtomic = require('write-file-atomic')
 
+async function run (command) {
+    const { stdout, stderr } = await exec(command)
+    console.log(command, stdout)
+    expect(stderr).toBe('')
+    return { stdout, stderr }
+}
+
 async function prepareGitRepo (folder) {
     const filename = 'test.txt'
     const filepath = path.join(folder, filename)
@@ -33,6 +40,11 @@ async function prepareGitRepo (folder) {
     await writeFileAtomic(filepath2, text1)
     await exec(`git -C ${folder} add ${filename2}`)
     await exec(`GIT_COMMITTER_DATE="2010-01-01T22:04:00Z" git -C ${folder} -c user.name="Name2" -c user.email=user2@example.com commit --author='User <user@example.com>' --date "2005-08-07T23:13:13Z" -am 'another file'`)
+    await exec(`mkdir -p ${path.join(folder, 'bin')}`)
+    await writeFileAtomic(path.join(folder, 'bin', 'script.js'), '#!/usr/bin/env node\nconsole.log(911)\n')
+    await exec(`chmod +x ${path.join(folder, 'bin', 'script.js')}`)
+    await exec(`git -C ${folder} add ${path.join('bin', 'script.js')}`)
+    await exec(`GIT_COMMITTER_DATE="2010-01-01T22:05:00Z" git -C ${folder} -c user.name="Name2" -c user.email=user2@example.com commit --author='User <user@example.com>' --date "2005-09-07T23:13:13Z" -am 'add script!'`)
 }
 
 test('prepareGitRepo()', async () => {
@@ -46,6 +58,7 @@ test('prepareGitRepo()', async () => {
         } = await exec(`git -C ${folder} log --pretty='format:%H %aI "%an" <%ae> %cI "%cn" <%ce> %s'`)
         expect(stderr).toBe('')
         expect(stdout).toBe([
+            '43a8998c57a1885fb9bb4ae8342b2e8a9285f002 2005-09-07T23:13:13+00:00 "User" <user@example.com> 2010-01-01T22:05:00+00:00 "Name2" <user2@example.com> add script!',
             'a9384415955e78b0adfd00e5fb95b99eff97138c 2005-08-07T23:13:13+00:00 "User" <user@example.com> 2010-01-01T22:04:00+00:00 "Name2" <user2@example.com> another file',
             'dded478c4d2bf21367a88d7e9bb2b6ea18eb3c50 2005-07-07T23:13:13+00:00 "User" <user@example.com> 2010-01-01T22:03:00+00:00 "Name2" <user2@example.com> create link',
             'ee01df4e6cc73e4210e87c94b853a96103ca02c2 2005-06-07T23:13:13+00:00 "User" <user@example.com> 2010-01-01T22:02:00+00:00 "Name2" <user2@example.com> rename file',
@@ -56,7 +69,22 @@ test('prepareGitRepo()', async () => {
     {
         const { stdout, stderr } = await exec(`git -C ${folder} log -p`)
         expect(stderr).toBe('')
-        expect(stdout).toBe(`commit a9384415955e78b0adfd00e5fb95b99eff97138c
+        expect(stdout).toBe(`commit 43a8998c57a1885fb9bb4ae8342b2e8a9285f002
+Author: User <user@example.com>
+Date:   Wed Sep 7 23:13:13 2005 +0000
+
+    add script!
+
+diff --git a/bin/script.js b/bin/script.js
+new file mode 100755
+index 0000000..ca29b27
+--- /dev/null
++++ b/bin/script.js
+@@ -0,0 +1,2 @@
++#!/usr/bin/env node
++console.log(911)
+
+commit a9384415955e78b0adfd00e5fb95b99eff97138c
 Author: User <user@example.com>
 Date:   Sun Aug 7 23:13:13 2005 +0000
 
@@ -138,4 +166,83 @@ test('gitexporter config.json', async () => {
     const file1 = fs.readFileSync('index.js', { encoding: 'utf-8' })
     const file2 = fs.readFileSync('ignore.default/index.js', { encoding: 'utf-8' })
     expect(file1).toBe(file2)
+})
+
+test('gitexporter allowed paths', async () => {
+    const config = `{
+  "forceReCreateRepo": true,
+  "targetRepoPath": "ignore.allowed-paths-target",
+  "sourceRepoPath": "ignore.allowed-paths",
+  "allowedPaths": ["test.txt"]
+}`
+    await run('rm -rf ignore.allowed-paths*')
+    await prepareGitRepo('ignore.allowed-paths')
+    await writeFileAtomic('ignore.allowed-paths.config.json', config)
+    await run(`node index.js ignore.allowed-paths.config.json`)
+
+    const { stdout, stderr } = await exec(`ls -a ignore.allowed-paths-target`)
+    expect(stderr).toBe('')
+    expect(stdout).toBe(`.
+..
+.git
+Test.txt
+`)
+
+    const logs = JSON.parse(fs.readFileSync('ignore.allowed-paths-target.log.json', { encoding: 'utf-8' }))
+    expect(logs.paths).toEqual([
+        'test.txt',
+        'Test.txt',
+        'Test.txt.link',
+        'sTest.txt',
+        'bin/script.js',
+    ])
+    expect(logs.ignoredPaths).toEqual([])
+    expect(logs.allowedPaths).toEqual([
+        'test.txt',
+        'Test.txt',
+    ])
+})
+
+test('gitexporter ignore paths', async () => {
+    const config = `{
+  "forceReCreateRepo": true,
+  "targetRepoPath": "ignore.ignored-paths-target",
+  "sourceRepoPath": "ignore.ignored-paths",
+  "ignoredPaths": ["test.txt"]
+}`
+
+    await run('rm -rf ignore.ignored-paths*')
+    await prepareGitRepo('ignore.ignored-paths')
+    await writeFileAtomic('ignore.ignored-paths.config.json', config)
+    console.log(await run(`node index.js ignore.ignored-paths.config.json`))
+
+    const { stdout, stderr } = await exec(`ls -a ignore.ignored-paths-target`)
+    expect(stderr).toBe('')
+    expect(stdout).toBe(`.
+..
+.git
+Test.txt.link
+bin
+sTest.txt
+`)
+
+    const logs = JSON.parse(fs.readFileSync('ignore.ignored-paths-target.log.json', { encoding: 'utf-8' }))
+    expect(logs.paths).toEqual([
+        'test.txt',
+        'Test.txt',
+        'Test.txt.link',
+        'sTest.txt',
+        'bin/script.js',
+    ])
+    expect(logs.ignoredPaths).toEqual([
+        'test.txt',
+        'Test.txt',
+    ])
+    expect(logs.allowedPaths).toEqual([
+        'test.txt',
+        'Test.txt',
+        "Test.txt.link",
+        "sTest.txt",
+        "bin/script.js",
+    ])
 })
