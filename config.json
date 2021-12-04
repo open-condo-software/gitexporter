@@ -1,0 +1,9 @@
+{
+  "forceReCreateRepo": false,
+  "followByLogFile": true,
+  "logFilePath": "ignore.default.log.json",
+  "targetRepoPath": "ignore.default",
+  "sourceRepoPath": ".",
+  "allowedPaths": ["*"],
+  "ignorePaths": []
+}
