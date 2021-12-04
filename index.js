@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 const Git = require('nodegit')
+const ignore = require('ignore')
 
 const { Command } = require('commander')
 const packageJson = require(path.join(__dirname, './package.json'))
@@ -105,6 +106,64 @@ async function commitFiles (repo, author, committer, message, files) {
     return commitOid.toString()
 }
 
+async function getDiffFiles (repo, hash) {
+    if (DEBUG) console.log('getDiffFiles()', hash)
+
+    const results = []
+    const commit = await repo.getCommit(hash)
+    const tree = await commit.getTree()
+
+    const diffList = await commit.getDiff()
+    for (const diff of diffList) {
+        const patches = await diff.patches()
+        for (const patch of patches) {
+            const oldFile = patch.oldFile()
+            const oldFilePath = oldFile.path()
+            const oldFileMode = oldFile.mode()
+            const newFile = patch.newFile()
+            const newFilePath = newFile.path()
+            const newFileMode = newFile.mode()
+            const changeMode = newFileMode !== oldFileMode && !patch.isAdded() && !patch.isDeleted()
+            const changePath = newFilePath !== oldFilePath
+            const status = patch.status()
+            const statusString = (status === 1) ? 'C' : (status === 2) ? 'D' : (status === 3) ? 'U' : '?'
+            const mode = (patch.isAdded()) ? newFileMode : oldFileMode
+            if (changePath || DEBUG) console.log(
+                statusString, patch.size(), patch.isAdded(), patch.isModified(), patch.isDeleted(), patch.isRenamed(), patch.isCopied(), patch.isTypeChange(), patch.isConflicted(), patch.isUnreadable(), patch.isIgnored(), patch.isUntracked(), patch.isUnmodified(),
+                oldFilePath, mode, changeMode ? newFileMode : '-', changePath ? newFilePath : '-', patch.lineStats(),
+            )
+
+            if (status === 1) {
+                const entry = await tree.getEntry(newFilePath)
+                results.push({
+                    filemode: newFileMode,
+                    type: entry.type(),
+                    path: newFilePath,
+                    entry,
+                })
+            } else if (status === 2) {
+                results.push({
+                    filemode: 0,
+                    type: -1,
+                    path: oldFilePath,
+                    entry: undefined,
+                })
+            } else if (status === 3) {
+                const entry = await tree.getEntry(newFilePath)
+                results.push({
+                    filemode: newFileMode,
+                    type: entry.type(),
+                    path: newFilePath,
+                    entry,
+                })
+            }
+        }
+    }
+
+    if (DEBUG) console.log('getDiffFiles()', hash, 'done')
+    return results
+}
+
 async function getTreeFiles (repo, hash, { withSubmodules, withDirectories } = {}) {
     if (DEBUG) console.log('getTreeFiles()', hash)
 
@@ -175,12 +234,55 @@ async function writeFile (path, buffer, permission) {
     }
 }
 
-async function main (config) {
+function prepareLogData (commits) {
+    const result = []
+    for (const { date, sha, newSha, author, committer, processing, message } of commits) {
+        if (!processing) break
+        const { tX, dt, paths, ignoredPaths, allowedPaths, index } = processing
+        result.push({
+            index,
+            date, sha, newSha, tX, dt, paths, ignoredPaths, allowedPaths,
+            message: message.substring(0, 200),
+            author: {
+                name: author.name(),
+                email: author.email(),
+            },
+            committer: {
+                name: committer.name(),
+                email: committer.email(),
+            },
+        })
+    }
+
+    return result
+}
+
+async function writeLogData (logFilePath, commits, filePaths, ignoredPaths) {
+    await fs.promises.writeFile(logFilePath, JSON.stringify({
+        commits: prepareLogData(commits),
+        paths: [...filePaths],
+        ignoredPaths: [...ignoredPaths],
+    }, null, 2))
+}
+
+async function stash (repo) {
+    const sig = await Git.Signature.create('GIT EXPORTER JS', 'gitexporter@example.com', 123456789, 60)
+    try {
+        await Git.Stash.save(repo, sig, 'our stash', 0)
+    } catch (e) {
+        console.error('stash:', e)
+    }
+}
+
+async function main () {
     const options = {
         forceReCreateRepo: true,
         targetRepoPath: NEW_REPO,
-        sourceRepoPath: SOURCE_REPO,
+        sourceRepoPath: '.',
+        logFilePath: NEW_REPO + '.log.json',
     }
+
+    const time0 = Date.now()
 
     if (options.forceReCreateRepo && fs.existsSync(options.targetRepoPath)) {
         console.log('Remove existing repo:', options.targetRepoPath)
@@ -188,21 +290,39 @@ async function main (config) {
     }
 
     const targetRepo = await openOrInitRepo(options.targetRepoPath)
+    await stash(targetRepo)
+
     const sourceRepo = await Git.Repository.open(options.sourceRepoPath)
     const commits = await getCommitHistory(await sourceRepo.getMasterCommit())
 
     let commitIndex = 0
     const commitLength = commits.length
 
+    let time1 = Date.now()
+    let time2 = Date.now()
     for (const commit of commits) {
 
         console.log(`Processing: ${++commitIndex}/${commitLength}`, commit.sha)
 
-        const files = await getTreeFiles(sourceRepo, commit.sha)
+        const files = await getDiffFiles(sourceRepo, commit.sha)
         await reWriteFilesInRepo(NEW_REPO, files)
-        await commitFiles(targetRepo, commit.author, commit.committer, commit.message, files)
+        const newSha = await commitFiles(targetRepo, commit.author, commit.committer, commit.message, files)
 
+        time1 = time2
+        time2 = Date.now()
+        commit.newSha = newSha
+        commit.processing = {
+            t0: time0,
+            tX: time2,
+            index: commitIndex - 1,
+            dt: time2 - time1,
+        }
+
+        await writeLogData(options.logFilePath, commits)
     }
+
+    await writeLogData(options.logFilePath, commits)
+    console.log(`Finish: total=${Date.now() - time0}ms;`)
 }
 
 const program = new Command()
