@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
-const Git = require('nodegit')
-
 const fs = require('fs')
 const path = require('path')
+
+const Git = require('nodegit')
+
+const { Command } = require('commander')
+const packageJson = require(path.join(__dirname, './package.json'))
 
 const NEW_REPO = path.resolve(__dirname, './ignore.test')
 const SOURCE_REPO = '.'
@@ -102,7 +105,6 @@ async function commitFiles (repo, author, committer, message, files) {
     return commitOid.toString()
 }
 
-
 async function getTreeFiles (repo, hash, { withSubmodules, withDirectories } = {}) {
     if (DEBUG) console.log('getTreeFiles()', hash)
 
@@ -173,7 +175,7 @@ async function writeFile (path, buffer, permission) {
     }
 }
 
-async function main () {
+async function main (config) {
     const options = {
         forceReCreateRepo: true,
         targetRepoPath: NEW_REPO,
@@ -203,4 +205,10 @@ async function main () {
     }
 }
 
-main()
+const program = new Command()
+program
+    .version(packageJson.version)
+    .argument('<config-path>', 'json config path')
+    .description(packageJson.description)
+    .action(main)
+    .parseAsync(process.argv)

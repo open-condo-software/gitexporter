@@ -14,6 +14,7 @@
     "gitexporter": "./index.js"
   },
   "dependencies": {
+    "commander": "^8.3.0",
     "ignore": "^5.1.9",
     "nodegit": "^0.27.0"
   }
