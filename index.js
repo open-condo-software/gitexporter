@@ -5,12 +5,11 @@ const path = require('path')
 
 const Git = require('nodegit')
 const ignore = require('ignore')
+const writeFileAtomic = require('write-file-atomic')
 
 const { Command } = require('commander')
 const packageJson = require(path.join(__dirname, './package.json'))
 
-const NEW_REPO = path.resolve(__dirname, './ignore.test')
-const SOURCE_REPO = '.'
 const DEBUG = false
 
 async function openOrInitRepo (repoPath) {
@@ -215,23 +214,24 @@ async function getTreeFiles (repo, hash, { withSubmodules, withDirectories } = {
 }
 
 async function writeFile (path, buffer, permission) {
-    let fileDescriptor
-
-    try {
-        fileDescriptor = await fs.promises.open(path, 'w', permission)
-    } catch (e) {
-        console.error(e)
-        await fs.promises.chmod(path, 33188)
-        fileDescriptor = await fs.promises.open(path, 'w', permission)
-    }
-
-    if (fileDescriptor) {
-        await fileDescriptor.write(buffer, 0, buffer.length, 0)
-        await fileDescriptor.chmod(permission)
-        await fileDescriptor.close()
-    } else {
-        throw new Error(`can't write file: ${path}`)
-    }
+    await writeFileAtomic(path, buffer, { mode: permission })
+    // let fileDescriptor
+    //
+    // try {
+    //     fileDescriptor = await fs.promises.open(path, 'w', permission)
+    // } catch (e) {
+    //     console.error(e)
+    //     await fs.promises.chmod(path, 33188)
+    //     fileDescriptor = await fs.promises.open(path, 'w', permission)
+    // }
+    //
+    // if (fileDescriptor) {
+    //     await fileDescriptor.write(buffer, 0, buffer.length, 0)
+    //     await fileDescriptor.chmod(permission)
+    //     await fileDescriptor.close()
+    // } else {
+    //     throw new Error(`can't write file: ${path}`)
+    // }
 }
 
 function prepareLogData (commits) {
@@ -258,11 +258,37 @@ function prepareLogData (commits) {
 }
 
 async function writeLogData (logFilePath, commits, filePaths, ignoredPaths) {
-    await fs.promises.writeFile(logFilePath, JSON.stringify({
+    const data = JSON.stringify({
         commits: prepareLogData(commits),
         paths: [...filePaths],
         ignoredPaths: [...ignoredPaths],
-    }, null, 2))
+    }, null, 2)
+    await writeFileAtomic(logFilePath, data)
+}
+
+async function readLogData (logFilePath) {
+    try {
+        return JSON.parse(await fs.promises.readFile(logFilePath))
+    } catch (e) {
+        return { commits: [], paths: [] }
+    }
+}
+
+async function hasCommit (repo, hash) {
+    try {
+        await repo.getCommit(hash)
+        return true
+    } catch (e) {
+        if (e.message.search('object not found') !== -1) return false
+        throw e
+    }
+}
+
+async function checkout (repo, hash) {
+    const ref = await Git.Reference.create(repo, 'remote/origin/noname', hash, 1, '')
+    await repo.checkoutRef(ref, {
+        checkoutStrategy: Git.Checkout.STRATEGY.FORCE,
+    })
 }
 
 async function stash (repo) {
@@ -270,19 +296,40 @@ async function stash (repo) {
     try {
         await Git.Stash.save(repo, sig, 'our stash', 0)
     } catch (e) {
-        console.error('stash:', e)
+        if (e.message.includes('there is nothing to stash') >= 0) return
+        console.error('Stash error:', e.message)
     }
 }
 
-async function main () {
-    const options = {
-        forceReCreateRepo: true,
-        targetRepoPath: NEW_REPO,
-        sourceRepoPath: '.',
-        logFilePath: NEW_REPO + '.log.json',
+async function readOptions (config, args) {
+    const data = fs.readFileSync(config)
+    const options = JSON.parse(data)
+    const dontShowTiming = !!options.dontShowTiming || args.dontShowTiming || false
+    const targetRepoPath = options.targetRepoPath || 'ignore.target'
+    const sourceRepoPath = options.sourceRepoPath || '.'
+    const logFilePath = options.logFilePath || targetRepoPath + '.log.json'
+    const forceReCreateRepo = options.forceReCreateRepo || false
+    const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || true
+    const allowedPaths = options.allowedPaths || ['*']
+    const ignorePaths = options.ignorePaths || []
+    return {
+        dontShowTiming,
+        forceReCreateRepo,
+        followByLogFile,
+        targetRepoPath,
+        sourceRepoPath,
+        logFilePath,
+        allowedPaths,
+        ignorePaths,
     }
+}
+
+async function main (config, args) {
+    const options = await readOptions(config, args)
 
     const time0 = Date.now()
+    const ig = ignore().add(options.ignorePaths)
+    const al = ignore().add(options.allowedPaths)
 
     if (options.forceReCreateRepo && fs.existsSync(options.targetRepoPath)) {
         console.log('Remove existing repo:', options.targetRepoPath)
@@ -291,6 +338,11 @@ async function main () {
 
     const targetRepo = await openOrInitRepo(options.targetRepoPath)
     await stash(targetRepo)
+    const existingLogState = await readLogData(options.logFilePath)
+    const isFollowByLogFileFeatureEnabled = options.followByLogFile && !options.forceReCreateRepo && existingLogState.commits.length
+    if (isFollowByLogFileFeatureEnabled) {
+        console.log('Follow target repo state by log file:', existingLogState.commits.length, 'commits')
+    }
 
     const sourceRepo = await Git.Repository.open(options.sourceRepoPath)
     const commits = await getCommitHistory(await sourceRepo.getMasterCommit())
@@ -300,13 +352,54 @@ async function main () {
 
     let time1 = Date.now()
     let time2 = Date.now()
+    let pathsLength = 0
+    let ignoredPathsLength = 0
+    let allowedPathsLength = 0
+    let isFollowLogOk = true
+    let lastFollowCommit = null
+    const filePaths = new Set()
+    const ignoredPaths = new Set()
     for (const commit of commits) {
 
-        console.log(`Processing: ${++commitIndex}/${commitLength}`, commit.sha)
+        console.log(`Processing: ${++commitIndex}/${commitLength}`, commit.sha, (options.dontShowTiming) ? '' : `~${Math.round((time2 - time0) / commitIndex)}ms; ${(time2 - time1)}ms`)
 
-        const files = await getDiffFiles(sourceRepo, commit.sha)
-        await reWriteFilesInRepo(NEW_REPO, files)
-        const newSha = await commitFiles(targetRepo, commit.author, commit.committer, commit.message, files)
+        if (isFollowLogOk && isFollowByLogFileFeatureEnabled) {
+            const existingCommit = existingLogState.commits[commitIndex - 1]
+            if (existingCommit) {
+                const { sha, newSha } = existingCommit
+                const hasTargetCommit = await hasCommit(targetRepo, newSha)
+                const hasSourceCommit = await hasCommit(sourceRepo, sha)
+                if (hasTargetCommit && hasSourceCommit) {
+                    lastFollowCommit = newSha
+                    continue
+                } else {
+                    isFollowLogOk = false
+                    await checkout(targetRepo, lastFollowCommit)
+                    console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
+                }
+            } else {
+                isFollowLogOk = false
+                await checkout(targetRepo, lastFollowCommit)
+                console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
+            }
+        }
+
+        let files = (commitIndex === -1) ? await getTreeFiles(sourceRepo, commit.sha) : await getDiffFiles(sourceRepo, commit.sha)
+        pathsLength = files.length
+        files.forEach(({ path }) => {
+            filePaths.add(path)
+            if (ig.ignores(path)) ignoredPaths.add(path)
+        })
+
+        files = files.filter(({ path }) => !ig.ignores(path))
+        ignoredPathsLength = pathsLength - files.length
+
+        files = files.filter(({ path }) => al.ignores(path))
+        allowedPathsLength = files.length
+
+        await reWriteFilesInRepo(options.targetRepoPath, files)
+        const newCommitMessage = commit.message
+        const newSha = await commitFiles(targetRepo, commit.author, commit.committer, newCommitMessage, files)
 
         time1 = time2
         time2 = Date.now()
@@ -316,19 +409,23 @@ async function main () {
             tX: time2,
             index: commitIndex - 1,
             dt: time2 - time1,
+            paths: pathsLength,
+            ignoredPaths: ignoredPathsLength,
+            allowedPaths: allowedPathsLength,
         }
 
-        await writeLogData(options.logFilePath, commits)
+        await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths)
     }
 
-    await writeLogData(options.logFilePath, commits)
-    console.log(`Finish: total=${Date.now() - time0}ms;`)
+    await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths)
+    console.log((options.dontShowTiming) ? 'Finish' : `Finish: total=${Date.now() - time0}ms;`)
 }
 
 const program = new Command()
 program
     .version(packageJson.version)
     .argument('<config-path>', 'json config path')
+    .option('--dont-show-timing', 'don\'t show timing info')
     .description(packageJson.description)
     .action(main)
     .parseAsync(process.argv)
