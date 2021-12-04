@@ -1,0 +1,19 @@
+{
+  "name": "gitexporter",
+  "version": "1.0.0",
+  "description": "Utility for exporting private git repository commits to a open source public repository",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js"
+  },
+  "repository": "https://github.com/open-condo-software/gitexporter",
+  "author": "pahaz@doma.ai",
+  "license": "MIT",
+  "private": false,
+  "bin": {
+    "gitexporter": "./index.js"
+  },
+  "dependencies": {
+    "nodegit": "^0.27.0"
+  }
+}
