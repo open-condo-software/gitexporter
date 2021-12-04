@@ -312,6 +312,8 @@ async function readOptions (config, args) {
     const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || true
     const allowedPaths = options.allowedPaths || ['*']
     const ignoredPaths = options.ignoredPaths || []
+    let commitTransformer = options.commitTransformer || null
+    if (commitTransformer) commitTransformer = require(commitTransformer)
     return {
         debug,
         dontShowTiming,
@@ -322,6 +324,7 @@ async function readOptions (config, args) {
         logFilePath,
         allowedPaths,
         ignoredPaths,
+        commitTransformer,
     }
 }
 
@@ -401,9 +404,10 @@ async function main (config, args) {
         files = files.filter(({ path }) => al.ignores(path))
         allowedPathsLength = files.length
 
+        if (options.commitTransformer) await options.commitTransformer(commit, files)
+
         await reWriteFilesInRepo(options.targetRepoPath, files)
-        const newCommitMessage = commit.message
-        const newSha = await commitFiles(targetRepo, commit.author, commit.committer, newCommitMessage, files)
+        const newSha = await commitFiles(targetRepo, commit.author, commit.committer, commit.message, files)
 
         time1 = time2
         time2 = Date.now()
