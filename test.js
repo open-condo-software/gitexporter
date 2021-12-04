@@ -162,7 +162,7 @@ index 0000000..6dbb898
 test('gitexporter config.json', async () => {
     await exec(`rm -rf  ignore.default`)
     await exec(`rm -rf  ignore.default.log.json`)
-    await run(`node --trace-warnings index.js config.json`)
+    await run(`node --unhandled-rejections=strict index.js config.json`)
     const file1 = fs.readFileSync('index.js', { encoding: 'utf-8' })
     const file2 = fs.readFileSync('ignore.default/index.js', { encoding: 'utf-8' })
     expect(file1).toBe(file2)
@@ -178,7 +178,7 @@ test('gitexporter allowed paths', async () => {
     await run('rm -rf ignore.allowed-paths*')
     await prepareGitRepo('ignore.allowed-paths')
     await writeFileAtomic('ignore.allowed-paths.config.json', config)
-    await run(`node --trace-warnings index.js ignore.allowed-paths.config.json`)
+    await run(`node --unhandled-rejections=strict index.js ignore.allowed-paths.config.json`)
 
     const { stdout, stderr } = await exec(`ls -a ignore.allowed-paths-target`)
     expect(stderr).toBe('')
@@ -214,7 +214,7 @@ test('gitexporter ignored paths', async () => {
     await run('rm -rf ignore.ignored-paths*')
     await prepareGitRepo('ignore.ignored-paths')
     await writeFileAtomic('ignore.ignored-paths.config.json', config)
-    await run(`node --trace-warnings index.js ignore.ignored-paths.config.json`)
+    await run(`node --unhandled-rejections=strict index.js ignore.ignored-paths.config.json`)
 
     const { stdout, stderr } = await exec(`ls -a ignore.ignored-paths-target`)
     expect(stderr).toBe('')
@@ -259,7 +259,7 @@ test('gitexporter ignored and allowed paths', async () => {
     await run('rm -rf ignore.ignored-allowed-paths*')
     await prepareGitRepo('ignore.ignored-allowed-paths')
     await writeFileAtomic('ignore.ignored-allowed-paths.config.json', config)
-    await run(`node --trace-warnings index.js ignore.ignored-allowed-paths.config.json`)
+    await run(`node --unhandled-rejections=strict index.js ignore.ignored-allowed-paths.config.json`)
 
     const { stdout, stderr } = await exec(`ls -a ignore.ignored-allowed-paths-target`)
     expect(stderr).toBe('')
