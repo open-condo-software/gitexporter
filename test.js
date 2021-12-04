@@ -159,7 +159,7 @@ index 0000000..6dbb898
     }
 })
 
-test('gitexporter config.json', async () => {
+test.skip('gitexporter config.json', async () => {
     await exec(`rm -rf  ignore.default`)
     await exec(`rm -rf  ignore.default.log.json`)
     await run(`node --unhandled-rejections=strict index.js config.json`)
