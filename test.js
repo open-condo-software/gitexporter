@@ -48,7 +48,7 @@ async function prepareGitRepo (folder) {
 }
 
 test('prepareGitRepo()', async () => {
-    const folder = 'ignore.test1'
+    const folder = 'ignore.prepare-git-repo'
     await prepareGitRepo(folder)
 
     {
@@ -162,7 +162,7 @@ index 0000000..6dbb898
 test('gitexporter config.json', async () => {
     await exec(`rm -rf  ignore.default`)
     await exec(`rm -rf  ignore.default.log.json`)
-    await exec(`node index.js config.json`)
+    await run(`node index.js config.json`)
     const file1 = fs.readFileSync('index.js', { encoding: 'utf-8' })
     const file2 = fs.readFileSync('ignore.default/index.js', { encoding: 'utf-8' })
     expect(file1).toBe(file2)
@@ -203,7 +203,7 @@ Test.txt
     ])
 })
 
-test('gitexporter ignore paths', async () => {
+test('gitexporter ignored paths', async () => {
     const config = `{
   "forceReCreateRepo": true,
   "targetRepoPath": "ignore.ignored-paths-target",
@@ -214,7 +214,7 @@ test('gitexporter ignore paths', async () => {
     await run('rm -rf ignore.ignored-paths*')
     await prepareGitRepo('ignore.ignored-paths')
     await writeFileAtomic('ignore.ignored-paths.config.json', config)
-    console.log(await run(`node index.js ignore.ignored-paths.config.json`))
+    await run(`node index.js ignore.ignored-paths.config.json`)
 
     const { stdout, stderr } = await exec(`ls -a ignore.ignored-paths-target`)
     expect(stderr).toBe('')
@@ -241,8 +241,48 @@ sTest.txt
     expect(logs.allowedPaths).toEqual([
         'test.txt',
         'Test.txt',
-        "Test.txt.link",
-        "sTest.txt",
-        "bin/script.js",
+        'Test.txt.link',
+        'sTest.txt',
+        'bin/script.js',
+    ])
+})
+
+test('gitexporter ignored and allowed paths', async () => {
+    const config = `{
+  "forceReCreateRepo": true,
+  "targetRepoPath": "ignore.ignored-allowed-paths-target",
+  "sourceRepoPath": "ignore.ignored-allowed-paths",
+  "ignoredPaths": ["*.txt"],
+  "allowedPaths": ["*.js"]
+}`
+
+    await run('rm -rf ignore.ignored-allowed-paths*')
+    await prepareGitRepo('ignore.ignored-allowed-paths')
+    await writeFileAtomic('ignore.ignored-allowed-paths.config.json', config)
+    await run(`node index.js ignore.ignored-allowed-paths.config.json`)
+
+    const { stdout, stderr } = await exec(`ls -a ignore.ignored-allowed-paths-target`)
+    expect(stderr).toBe('')
+    expect(stdout).toBe(`.
+..
+.git
+bin
+`)
+
+    const logs = JSON.parse(fs.readFileSync('ignore.ignored-allowed-paths-target.log.json', { encoding: 'utf-8' }))
+    expect(logs.paths).toEqual([
+        'test.txt',
+        'Test.txt',
+        'Test.txt.link',
+        'sTest.txt',
+        'bin/script.js',
+    ])
+    expect(logs.ignoredPaths).toEqual([
+        'test.txt',
+        'Test.txt',
+        'sTest.txt',
+    ])
+    expect(logs.allowedPaths).toEqual([
+        'bin/script.js',
     ])
 })

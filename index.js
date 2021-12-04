@@ -10,7 +10,7 @@ const writeFileAtomic = require('write-file-atomic')
 const { Command } = require('commander')
 const packageJson = require(path.join(__dirname, './package.json'))
 
-const DEBUG = false
+let DEBUG = false
 
 async function openOrInitRepo (repoPath) {
     if (DEBUG) console.log('openOrInitRepo()', repoPath)
@@ -28,14 +28,14 @@ async function openOrInitRepo (repoPath) {
 }
 
 async function reWriteFilesInRepo (repoPath, files) {
-    if (DEBUG) console.log('reWriteFilesInRepo()', repoPath, files.length)
+    if (DEBUG) console.log('reWriteFilesInRepo()', files.length)
 
     // NOTE: we need to support rename case! if we rename from Index.js to index.js its equal to create Index.js and remove index.js
     //   And if your FS is ignore case you can create and delete the same file!
     const deleteFiles = files.filter(f => f.type === -1)
     for (const file of deleteFiles) {
         const filePath = path.join(repoPath, file.path)
-        if (DEBUG) console.log('delete:', filePath)
+        if (DEBUG) console.log('reWriteFilesInRepo() delete:', filePath)
         await fs.promises.rm(filePath, { force: true })
     }
 
@@ -48,17 +48,18 @@ async function reWriteFilesInRepo (repoPath, files) {
             const dirPath = path.dirname(filePath)
             const blob = await file.entry.getBlob()
             const buffer = blob.content()
-            if (DEBUG) console.log('write:', filePath, blob.rawsize(), `mode:${file.filemode}`, JSON.stringify(blob.toString().substring(0, 90)))
+            if (DEBUG) console.log('reWriteFilesInRepo() write:', filePath, blob.rawsize(), `mode:${file.filemode}`, JSON.stringify(blob.toString().substring(0, 90)))
             await fs.promises.mkdir(dirPath, { recursive: true })
             await writeFile(filePath, buffer, file.filemode)
         } else if (file.type === 1) { // submodule
             // NOTE: just skeep
             // TODO(pahaz): what we really should to do with submodules?
+            console.log(`? git submodule: ${filePath} (skip)`)
         } else {
-            console.log('?', file.type, file.path)
+            console.log(`? WTF ? type=${file.type} path=${file.path} (skip)`)
         }
     }
-    if (DEBUG) console.log('reWriteFilesInRepo()', repoPath, files.length, 'done')
+    if (DEBUG) console.log('reWriteFilesInRepo() done')
 }
 
 async function getCommitHistory (repo) {
@@ -93,7 +94,7 @@ async function commitFiles (repo, author, committer, message, files) {
     const index = await repo.refreshIndex()
 
     for (const file of files) {
-        if (DEBUG) console.log('commitFiles() file', file.type, file.path)
+        if (DEBUG) console.log(`commitFiles() type=${file.type} path=${file.path}`)
         if (file.type === 3) await index.addByPath(file.path)
         else if (file.type === -1) await index.removeByPath(file.path)
     }
@@ -229,23 +230,6 @@ async function writeFile (path, buffer, permission) {
     } else {
         await writeFileAtomic(path, buffer, { mode: permission })
     }
-    // let fileDescriptor
-    //
-    // try {
-    //     fileDescriptor = await fs.promises.open(path, 'w', permission)
-    // } catch (e) {
-    //     console.error(e)
-    //     await fs.promises.chmod(path, 33188)
-    //     fileDescriptor = await fs.promises.open(path, 'w', permission)
-    // }
-    //
-    // if (fileDescriptor) {
-    //     await fileDescriptor.write(buffer, 0, buffer.length, 0)
-    //     await fileDescriptor.chmod(permission)
-    //     await fileDescriptor.close()
-    // } else {
-    //     throw new Error(`can't write file: ${path}`)
-    // }
 }
 
 function prepareLogData (commits) {
@@ -319,7 +303,8 @@ async function stash (repo) {
 async function readOptions (config, args) {
     const data = fs.readFileSync(config)
     const options = JSON.parse(data)
-    const dontShowTiming = !!options.dontShowTiming || args.dontShowTiming || false
+    const debug = !!options.debug || false
+    const dontShowTiming = !!options.dontShowTiming || false
     const targetRepoPath = options.targetRepoPath || 'ignore.target'
     const sourceRepoPath = options.sourceRepoPath || '.'
     const logFilePath = options.logFilePath || targetRepoPath + '.log.json'
@@ -328,6 +313,7 @@ async function readOptions (config, args) {
     const allowedPaths = options.allowedPaths || ['*']
     const ignoredPaths = options.ignoredPaths || []
     return {
+        debug,
         dontShowTiming,
         forceReCreateRepo,
         followByLogFile,
@@ -341,6 +327,7 @@ async function readOptions (config, args) {
 
 async function main (config, args) {
     const options = await readOptions(config, args)
+    if (options.debug) DEBUG = true
 
     const time0 = Date.now()
     const ig = ignore().add(options.ignoredPaths)
@@ -442,7 +429,6 @@ const program = new Command()
 program
     .version(packageJson.version)
     .argument('<config-path>', 'json config path')
-    .option('--dont-show-timing', 'don\'t show timing info')
     .description(packageJson.description)
     .action(main)
     .parseAsync(process.argv)
