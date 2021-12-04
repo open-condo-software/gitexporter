@@ -1,7 +1,9 @@
 # gitexporter cli tool
 
 You have an open source project with an open and closed part. 
-You are developing it in a git mono repository and don't want to use git submodules.
+You are developing it in a git mono repository and don't want to use git submodules for closed part.
+
+Use git exporter to create a new git repo from your privat git repo with only allowed public files and dirs.
 
 Example:
 
