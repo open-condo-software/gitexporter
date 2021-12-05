@@ -510,3 +510,101 @@ test('gitexporter follow by logfile', async () => {
         '\\ No newline at end of file',
     ])
 })
+
+test('gitexporter commitTransformer', async () => {
+    const folder = 'ignore.commit-transformer'
+    const config = `{
+  "forceReCreateRepo": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "commitTransformer": "./${folder}.transformer.js",
+  "allowedPaths": ["*"]
+}`
+    const transformer = `
+    module.exports = function (commit, files) {
+        commit.message = 'XXX: ' + commit.message
+    }
+    `
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config)
+    await writeFileAtomic(`${folder}.transformer.js`, transformer)
+    await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+
+    await run(`git -C ${folder}-target log -p`, [
+        'commit c2f516d4d8da0c0990808bbd6d9fb878e0aa3b69',
+        'Author: User <user@example.com>',
+        'Date:   Wed Sep 7 23:13:13 2005 +0000',
+        'XXX: add script!',
+        'diff --git a/bin/script.js b/bin/script.js',
+        'new file mode 100755',
+        'index 0000000..ca29b27',
+        '--- /dev/null',
+        '+++ b/bin/script.js',
+        '@@ -0,0 +1,2 @@',
+        '+#!/usr/bin/env node',
+        '+console.log(911)',
+        'commit 7c5a4e0740f3232445a917836d30bd5a68a5f53f',
+        'Author: User <user@example.com>',
+        'Date:   Sun Aug 7 23:13:13 2005 +0000',
+        'XXX: another file',
+        'diff --git a/sTest.txt b/sTest.txt',
+        'new file mode 100644',
+        'index 0000000..6dbb898',
+        '--- /dev/null',
+        '+++ b/sTest.txt',
+        '@@ -0,0 +1 @@',
+        '+Initial text',
+        '\\ No newline at end of file',
+        'commit b575b7476ddf4d581495ef93509bd44a5ee49ac3',
+        'Author: User <user@example.com>',
+        'Date:   Thu Jul 7 23:13:13 2005 +0000',
+        'XXX: create link',
+        'diff --git a/Test.txt.link b/Test.txt.link',
+        'new file mode 120000',
+        'index 0000000..d7da186',
+        '--- /dev/null',
+        '+++ b/Test.txt.link',
+        '@@ -0,0 +1 @@',
+        '+Test.txt',
+        '\\ No newline at end of file',
+        'commit 5840db1764b3b53fff9c295981744c997d3f27f4',
+        'Author: User <user@example.com>',
+        'Date:   Tue Jun 7 23:13:13 2005 +0000',
+        'XXX: rename file',
+        'diff --git a/test.txt b/test.txt',
+        'deleted file mode 100644',
+        'index 41c4a21..0000000',
+        '--- a/test.txt',
+        '+++ /dev/null',
+        '@@ -1 +0,0 @@',
+        '-Changed text',
+        '\\ No newline at end of file',
+        'commit bcc480d7ff93cbfab7808289bce89e8c442f801d',
+        'Author: User <user@example.com>',
+        'Date:   Sat May 7 23:13:13 2005 +0000',
+        'XXX: change initial text',
+        'diff --git a/test.txt b/test.txt',
+        'index 6dbb898..41c4a21 100644',
+        '--- a/test.txt',
+        '+++ b/test.txt',
+        '@@ -1 +1 @@',
+        '-Initial text',
+        '\\ No newline at end of file',
+        '+Changed text',
+        '\\ No newline at end of file',
+        'commit 918eea168bf7ea3d29c71ea841e4c2e64ee9e35f',
+        'Author: User <user@example.com>',
+        'Date:   Thu Apr 7 22:13:13 2005 +0000',
+        'XXX: initial commit',
+        'diff --git a/test.txt b/test.txt',
+        'new file mode 100644',
+        'index 0000000..6dbb898',
+        '--- /dev/null',
+        '+++ b/test.txt',
+        '@@ -0,0 +1 @@',
+        '+Initial text',
+        '\\ No newline at end of file',
+    ])
+})
