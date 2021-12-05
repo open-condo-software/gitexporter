@@ -38,4 +38,4 @@ The `gitexporter` goes through the git commit tree and adds to a new repo only t
 }
 ```
 
-Just run `gitexporter gitexporter.config.json` and you will get a new git repository with just `apps/service1` directory.
+Just run `npx gitexporter gitexporter.config.json` and you will get a new git repository with just `apps/service1` directory.
