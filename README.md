@@ -1,11 +1,23 @@
 # gitexporter cli tool
 
-You have an open source project with an open and closed part. 
-You are developing it in a git mono repository and don't want to use git submodules for closed part.
+You're in the right place if:
 
-Use git exporter to create a new git repo from your privat git repo with only allowed public files and dirs.
+ - Do you have an **open-source** project with an **open** and **closed part** and you want to **work in one git repo** without git submodules?
+ - Do you want to **public** some **private** GitHub **repo directories**?
+ - You don't want to use git submodules!
 
-Example:
+Others cases:
+
+ - You are developing in a git mono repository and want to open-source some directories
+ - You are developing some OpenSource project and want to disallow open some secret files
+
+# how it works ?
+
+`gitexporter` create a new git repo from your existing repository with only allowed public files and dirs.
+
+The `gitexporter` goes through the git commit tree and adds to a new repo only the allowed files.
+
+# Example
 
  - `/` -- monorepository root
  - `/apps/service1` -- it's open source
@@ -27,4 +39,3 @@ Just run `gitexporter gitexporter.config.json` and you will get a new git reposi
 
 ## how it works ?
 
-The `gitexporter` goes through the commit tree and adds only the allowed files there.
