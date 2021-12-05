@@ -1,10 +1,13 @@
+![gitexporter status](https://github.com/open-condo-software/gitexporter/actions/workflows/node.js.yml/badge.svg?branch=master)
+
 # gitexporter cli tool
 
 You're in the right place if:
 
  - Do you have an **open-source** project with an **open** and **closed part** and you want to **work in one git repo** without git submodules?
  - Do you want to **public** some **private** GitHub **repo directories**?
- - You don't want to use git submodules!
+ - You want to **keep** the **authorship** and **history** of the **comments**
+ - You don't want to use git submodules
 
 Others cases:
 
@@ -36,6 +39,3 @@ The `gitexporter` goes through the git commit tree and adds to a new repo only t
 ```
 
 Just run `gitexporter gitexporter.config.json` and you will get a new git repository with just `apps/service1` directory.
-
-## how it works ?
-
