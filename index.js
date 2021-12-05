@@ -32,8 +32,8 @@ async function reWriteFilesInRepo (repoPath, files) {
 
     // NOTE: we need to support rename case! if we rename from Index.js to index.js its equal to create Index.js and remove index.js
     //   And if your FS is ignore case you can create and delete the same file!
-    const deleteFiles = files.filter(f => f.type === -1)
-    for (const file of deleteFiles) {
+    for (const file of files) {
+        if (file.type !== -1) continue
         const filePath = path.join(repoPath, file.path)
         if (DEBUG) console.log('reWriteFilesInRepo() delete:', filePath)
         await fs.promises.rm(filePath, { force: true })
@@ -93,10 +93,26 @@ async function commitFiles (repo, author, committer, message, files) {
     if (DEBUG) console.log('commitFiles()', files.length)
     const index = await repo.refreshIndex()
 
+    // NOTE: we need to support rename case! if we rename from Index.js to index.js its equal to create Index.js and remove index.js
+    //   And if your FS is ignore case you can create and delete the same file!
     for (const file of files) {
-        if (DEBUG) console.log(`commitFiles() type=${file.type} path=${file.path}`)
-        if (file.type === 3) await index.addByPath(file.path)
-        else if (file.type === -1) await index.removeByPath(file.path)
+        if (file.type !== -1) continue
+        if (DEBUG) console.log(`commitFiles() removeByPath: ${file.path}`)
+        await index.removeByPath(file.path)
+    }
+
+    for (const file of files) {
+        if (file.type === -1) { // delete file
+            // NOTE: already processed
+        } else if (file.type === 3) { // file Type
+            if (DEBUG) console.log(`commitFiles() addByPath: ${file.path}`)
+            await index.addByPath(file.path)
+        } else if (file.type === 1) { // submodule
+            // TODO(pahaz): what we really should to do with submodules?
+            if (DEBUG) console.log(`commitFiles() ${file.path} (skip)`)
+        } else {
+            if (DEBUG) console.log(`commitFiles() type=${file.type} path=${file.path} (skip)`)
+        }
     }
 
     if (DEBUG) console.log('commitFiles() index.write()')

@@ -143,6 +143,38 @@ test('prepareGitRepo()', async () => {
     await run(`git -C ${folder} log -p`, DEFAULT_PREPARE_GIT_REPO_HISTORY)
 })
 
+test('gitexporter save git history', async () => {
+    const folder = 'ignore.save-history'
+    const config = `{
+  "forceReCreateRepo": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}"
+}`
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config)
+    await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+
+    const logs = JSON.parse(fs.readFileSync(`${folder}-target.log.json`, { encoding: 'utf-8' }))
+    expect(logs.paths).toEqual([
+        'test.txt',
+        'Test.txt',
+        'Test.txt.link',
+        'sTest.txt',
+        'bin/script.js',
+    ])
+    expect(logs.ignoredPaths).toEqual([])
+    expect(logs.allowedPaths).toEqual([
+        'test.txt',
+        'Test.txt',
+        'Test.txt.link',
+        'sTest.txt',
+        'bin/script.js',
+    ])
+
+    await run(`git -C ${folder}-target log -p`, DEFAULT_PREPARE_GIT_REPO_HISTORY)
+})
+
 test('gitexporter allowed paths', async () => {
     const folder = 'ignore.allowed-paths'
     const config = `{
@@ -174,30 +206,26 @@ test('gitexporter allowed paths', async () => {
 
     // NOTE: probably may have some differences on register sensitive filepath filesystems?!
     await run(`git -C ${folder}-target log -p`, [
-        'commit 6599d82704d3906cfd707a84cf99c4a510fada69',
+        'commit 867aa676ef2a4d5de5756a53dbff77d4a726e3e9',
         'Author: User <user@example.com>',
         'Date:   Wed Sep 7 23:13:13 2005 +0000',
         'add script!',
-        'commit 789e226321099850e0381797fb8732ea3d9a95f0',
+        'commit 427f8e83a1658852b8c6f4be99b4664976746aab',
         'Author: User <user@example.com>',
         'Date:   Sun Aug 7 23:13:13 2005 +0000',
         'another file',
-        'commit 93c00f434da4ac6853abd1ed389b6051ce198501',
+        'commit f44ba5da1dae5ced415f214f92ec0ba3e4d25a20',
         'Author: User <user@example.com>',
         'Date:   Thu Jul 7 23:13:13 2005 +0000',
         'create link',
-        'commit 4621bc9bbafbbf07d635751fe622906cd9451f81',
+        'commit ee01df4e6cc73e4210e87c94b853a96103ca02c2',
         'Author: User <user@example.com>',
         'Date:   Tue Jun 7 23:13:13 2005 +0000',
         'rename file',
-        'diff --git a/test.txt b/test.txt',
-        'deleted file mode 100644',
-        'index 41c4a21..0000000',
-        '--- a/test.txt',
-        '+++ /dev/null',
-        '@@ -1 +0,0 @@',
-        '-Changed text',
-        '\\ No newline at end of file',
+        'diff --git a/test.txt b/Test.txt',
+        'similarity index 100%',
+        'rename from test.txt',
+        'rename to Test.txt',
         'commit d0dc86bea4f548db93905b71da1c6915594bfd5b',
         'Author: User <user@example.com>',
         'Date:   Sat May 7 23:13:13 2005 +0000',
@@ -422,24 +450,24 @@ test('gitexporter follow by logfile', async () => {
 
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by log file: 6 commits', 'Follow log stopped! last commit 7/7 ef0289674d9d09dfcd33f3c82ebebc3f39172516'],
+        ['Finish', 'Follow target repo state by log file: 6 commits', 'Follow log stopped! last commit 7/7 46c01f27346ad1e77ffcc81e38b914ea17ae0395'],
     )
 
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 7953a9f91bea4191efce187b9a4b36155cddcc60'],
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
     )
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 7953a9f91bea4191efce187b9a4b36155cddcc60'],
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
     )
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 7953a9f91bea4191efce187b9a4b36155cddcc60'],
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
     )
 
     await run(`git -C ${folder}-target log -p`, [
-        'commit 7953a9f91bea4191efce187b9a4b36155cddcc60',
+        'commit 95655d5bd61e5d8c71acde522f28c0d46fb17330',
         'Author: User <user@example.com>',
         'Date:   Fri Oct 7 23:13:13 2005 +0000',
         'add hollo',
@@ -451,7 +479,7 @@ test('gitexporter follow by logfile', async () => {
         '@@ -0,0 +1 @@',
         '+hollo world!',
         '\\ No newline at end of file',
-        'commit ef0289674d9d09dfcd33f3c82ebebc3f39172516',
+        'commit 46c01f27346ad1e77ffcc81e38b914ea17ae0395',
         'Author: User <user@example.com>',
         'Date:   Wed Sep 7 23:13:13 2005 +0000',
         'add script!',
@@ -463,26 +491,22 @@ test('gitexporter follow by logfile', async () => {
         '@@ -0,0 +1,2 @@',
         '+#!/usr/bin/env node',
         '+console.log(911)',
-        'commit 789e226321099850e0381797fb8732ea3d9a95f0',
+        'commit 427f8e83a1658852b8c6f4be99b4664976746aab',
         'Author: User <user@example.com>',
         'Date:   Sun Aug 7 23:13:13 2005 +0000',
         'another file',
-        'commit 93c00f434da4ac6853abd1ed389b6051ce198501',
+        'commit f44ba5da1dae5ced415f214f92ec0ba3e4d25a20',
         'Author: User <user@example.com>',
         'Date:   Thu Jul 7 23:13:13 2005 +0000',
         'create link',
-        'commit 4621bc9bbafbbf07d635751fe622906cd9451f81',
+        'commit ee01df4e6cc73e4210e87c94b853a96103ca02c2',
         'Author: User <user@example.com>',
         'Date:   Tue Jun 7 23:13:13 2005 +0000',
         'rename file',
-        'diff --git a/test.txt b/test.txt',
-        'deleted file mode 100644',
-        'index 41c4a21..0000000',
-        '--- a/test.txt',
-        '+++ /dev/null',
-        '@@ -1 +0,0 @@',
-        '-Changed text',
-        '\\ No newline at end of file',
+        'diff --git a/test.txt b/Test.txt',
+        'similarity index 100%',
+        'rename from test.txt',
+        'rename to Test.txt',
         'commit d0dc86bea4f548db93905b71da1c6915594bfd5b',
         'Author: User <user@example.com>',
         'Date:   Sat May 7 23:13:13 2005 +0000',
@@ -533,7 +557,7 @@ test('gitexporter commitTransformer', async () => {
     await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
 
     await run(`git -C ${folder}-target log -p`, [
-        'commit c2f516d4d8da0c0990808bbd6d9fb878e0aa3b69',
+        'commit a5eb28f672bd8c801088c16da026d3cef8c2c5dd',
         'Author: User <user@example.com>',
         'Date:   Wed Sep 7 23:13:13 2005 +0000',
         'XXX: add script!',
@@ -545,7 +569,7 @@ test('gitexporter commitTransformer', async () => {
         '@@ -0,0 +1,2 @@',
         '+#!/usr/bin/env node',
         '+console.log(911)',
-        'commit 7c5a4e0740f3232445a917836d30bd5a68a5f53f',
+        'commit b5d8d9a675509efabd89348aceef6cffff809a75',
         'Author: User <user@example.com>',
         'Date:   Sun Aug 7 23:13:13 2005 +0000',
         'XXX: another file',
@@ -557,7 +581,7 @@ test('gitexporter commitTransformer', async () => {
         '@@ -0,0 +1 @@',
         '+Initial text',
         '\\ No newline at end of file',
-        'commit b575b7476ddf4d581495ef93509bd44a5ee49ac3',
+        'commit 737d203709702b8b1670beb3e001a7511db3089c',
         'Author: User <user@example.com>',
         'Date:   Thu Jul 7 23:13:13 2005 +0000',
         'XXX: create link',
@@ -569,18 +593,14 @@ test('gitexporter commitTransformer', async () => {
         '@@ -0,0 +1 @@',
         '+Test.txt',
         '\\ No newline at end of file',
-        'commit 5840db1764b3b53fff9c295981744c997d3f27f4',
+        'commit 5be2808ce613d73bbcc570931dbb9b71b36c13fa',
         'Author: User <user@example.com>',
         'Date:   Tue Jun 7 23:13:13 2005 +0000',
         'XXX: rename file',
-        'diff --git a/test.txt b/test.txt',
-        'deleted file mode 100644',
-        'index 41c4a21..0000000',
-        '--- a/test.txt',
-        '+++ /dev/null',
-        '@@ -1 +0,0 @@',
-        '-Changed text',
-        '\\ No newline at end of file',
+        'diff --git a/test.txt b/Test.txt',
+        'similarity index 100%',
+        'rename from test.txt',
+        'rename to Test.txt',
         'commit bcc480d7ff93cbfab7808289bce89e8c442f801d',
         'Author: User <user@example.com>',
         'Date:   Sat May 7 23:13:13 2005 +0000',
