@@ -383,3 +383,130 @@ test('gitexporter ignored and allowed paths', async () => {
         'initial commit',
     ])
 })
+
+function expectStdout (data, contains = null, notContains = null) {
+    expect(data).toHaveProperty('stdout')
+    if (contains && contains.length) {
+        for (const c of contains) {
+            expect(data.stdout).toContain(c)
+        }
+    }
+    if (notContains && notContains.length) {
+        for (const c of notContains) {
+            expect(data.stdout).not.toContain(c)
+        }
+    }
+}
+
+test('gitexporter follow by logfile', async () => {
+    const folder = 'ignore.follow-by-logfile'
+    const config = `{
+  "forceReCreateRepo": false,
+  "followByLogFile": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["sTest.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config)
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish'],
+        ['Follow target repo state', 'Follow log stopped'],
+    )
+
+    await addGitRepoCommit(folder, 'some-file.txt', 'hollo world!', 6, 'add hollo')
+
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by log file: 6 commits', 'Follow log stopped! last commit 7/7 ef0289674d9d09dfcd33f3c82ebebc3f39172516'],
+    )
+
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 7953a9f91bea4191efce187b9a4b36155cddcc60'],
+    )
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 7953a9f91bea4191efce187b9a4b36155cddcc60'],
+    )
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 7953a9f91bea4191efce187b9a4b36155cddcc60'],
+    )
+
+    await run(`git -C ${folder}-target log -p`, [
+        'commit 7953a9f91bea4191efce187b9a4b36155cddcc60',
+        'Author: User <user@example.com>',
+        'Date:   Fri Oct 7 23:13:13 2005 +0000',
+        'add hollo',
+        'diff --git a/some-file.txt b/some-file.txt',
+        'new file mode 100644',
+        'index 0000000..ff0d2a6',
+        '--- /dev/null',
+        '+++ b/some-file.txt',
+        '@@ -0,0 +1 @@',
+        '+hollo world!',
+        '\\ No newline at end of file',
+        'commit ef0289674d9d09dfcd33f3c82ebebc3f39172516',
+        'Author: User <user@example.com>',
+        'Date:   Wed Sep 7 23:13:13 2005 +0000',
+        'add script!',
+        'diff --git a/bin/script.js b/bin/script.js',
+        'new file mode 100755',
+        'index 0000000..ca29b27',
+        '--- /dev/null',
+        '+++ b/bin/script.js',
+        '@@ -0,0 +1,2 @@',
+        '+#!/usr/bin/env node',
+        '+console.log(911)',
+        'commit 789e226321099850e0381797fb8732ea3d9a95f0',
+        'Author: User <user@example.com>',
+        'Date:   Sun Aug 7 23:13:13 2005 +0000',
+        'another file',
+        'commit 93c00f434da4ac6853abd1ed389b6051ce198501',
+        'Author: User <user@example.com>',
+        'Date:   Thu Jul 7 23:13:13 2005 +0000',
+        'create link',
+        'commit 4621bc9bbafbbf07d635751fe622906cd9451f81',
+        'Author: User <user@example.com>',
+        'Date:   Tue Jun 7 23:13:13 2005 +0000',
+        'rename file',
+        'diff --git a/test.txt b/test.txt',
+        'deleted file mode 100644',
+        'index 41c4a21..0000000',
+        '--- a/test.txt',
+        '+++ /dev/null',
+        '@@ -1 +0,0 @@',
+        '-Changed text',
+        '\\ No newline at end of file',
+        'commit d0dc86bea4f548db93905b71da1c6915594bfd5b',
+        'Author: User <user@example.com>',
+        'Date:   Sat May 7 23:13:13 2005 +0000',
+        'change initial text',
+        'diff --git a/test.txt b/test.txt',
+        'index 6dbb898..41c4a21 100644',
+        '--- a/test.txt',
+        '+++ b/test.txt',
+        '@@ -1 +1 @@',
+        '-Initial text',
+        '\\ No newline at end of file',
+        '+Changed text',
+        '\\ No newline at end of file',
+        'commit c731fd997376f68806c5cbe100edc7000acb75db',
+        'Author: User <user@example.com>',
+        'Date:   Thu Apr 7 22:13:13 2005 +0000',
+        'initial commit',
+        'diff --git a/test.txt b/test.txt',
+        'new file mode 100644',
+        'index 0000000..6dbb898',
+        '--- /dev/null',
+        '+++ b/test.txt',
+        '@@ -0,0 +1 @@',
+        '+Initial text',
+        '\\ No newline at end of file',
+    ])
+})

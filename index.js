@@ -453,7 +453,7 @@ async function main (config, args) {
     }
 
     await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths)
-    if (isFollowLogOk) console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
+    if (isFollowLogOk && isFollowByLogFileFeatureEnabled) console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
     console.log((options.dontShowTiming) ? 'Finish' : `Finish: total=${Date.now() - time0}ms;`)
 }
 
