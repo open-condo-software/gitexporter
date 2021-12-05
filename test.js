@@ -17,39 +17,42 @@ async function run (command, expectStdoutLines = null) {
     return { stdout, stderr }
 }
 
+async function addGitRepoCommit (folder, repoPath, data, timeIndex, message, { chmod = null, mode = 'file' } = {}) {
+    const to60num = (x) => `${('' + (x % 60 - x % 10)).substring(0, 1)}${x % 10}`
+    await exec(`mkdir -p ${path.dirname(path.join(folder, repoPath))}`)
+    if (mode === 'file') {
+        await writeFileAtomic(path.join(folder, repoPath), data)
+    } else if (mode === 'link') {
+        await exec(`ln -s ${data} ${path.join(folder, repoPath)}`)
+    } else {
+        throw new Error('addGitRepoCommit(): unknown file mode')
+    }
+    if (chmod) await exec(`chmod ${chmod} ${path.join(folder, repoPath)}`)
+    await exec(`git -C ${folder} add ${repoPath}`)
+    const commiterDate = `2010-01-01T22:${to60num(timeIndex)}:00Z`
+    const commiterName = `Name2`
+    const commiterEmail = `user2@example.com`
+    const authorDate = `2005-${to60num(timeIndex + 4)}-07T${(timeIndex === 0) ? 22 : 23}:13:13Z`
+    const authorName = `User`
+    const authorEmail = `user@example.com`
+    await exec(`GIT_COMMITTER_DATE="${commiterDate}" git -C ${folder} -c user.name="${commiterName}" -c user.email=${commiterEmail} commit --author='${authorName} <${authorEmail}>' --date "${authorDate}" -am '${message}'`)
+}
+
 async function prepareGitRepo (folder) {
     const filename = 'test.txt'
-    const filepath = path.join(folder, filename)
     const renamedFilename = 'Test.txt'
-    const renamedFilepath = path.join(folder, renamedFilename)
-    const filename2 = 'sTest.txt'
-    const filepath2 = path.join(folder, filename2)
     const text1 = 'Initial text'
     const text2 = 'Changed text'
     await exec(`rm -rf ${folder}`)
     await exec(`mkdir -p ${folder}`)
     await exec(`git -C ${folder} init`)
-    await writeFileAtomic(filepath, text1)
-    await exec(`git -C ${folder} add ${filename}`)
-    await exec(`GIT_COMMITTER_DATE="2010-01-01T22:00:00Z" git -C ${folder} -c user.name="Name2" -c user.email=user2@example.com commit --author='User <user@example.com>' --date "2005-04-07T22:13:13Z" -am 'initial commit'`)
-    await writeFileAtomic(filepath, text2)
-    await exec(`git -C ${folder} add ${filename}`)
-    await exec(`GIT_COMMITTER_DATE="2010-01-01T22:01:00Z" git -C ${folder} -c user.name="Name2" -c user.email=user2@example.com commit --author='User <user@example.com>' --date "2005-05-07T23:13:13Z" -am 'change initial text'`)
+    await addGitRepoCommit(folder, filename, text1, 0, 'initial commit')
+    await addGitRepoCommit(folder, filename, text2, 1, 'change initial text')
     await exec(`git -C ${folder} rm ${filename}`)
-    await writeFileAtomic(renamedFilepath, text2)
-    await exec(`git -C ${folder} add ${renamedFilename}`)
-    await exec(`GIT_COMMITTER_DATE="2010-01-01T22:02:00Z" git -C ${folder} -c user.name="Name2" -c user.email=user2@example.com commit --author='User <user@example.com>' --date "2005-06-07T23:13:13Z" -am 'rename file'`)
-    await exec(`ln -s ${renamedFilename} ${renamedFilepath}.link`)
-    await exec(`git -C ${folder} add ${renamedFilename}.link`)
-    await exec(`GIT_COMMITTER_DATE="2010-01-01T22:03:00Z" git -C ${folder} -c user.name="Name2" -c user.email=user2@example.com commit --author='User <user@example.com>' --date "2005-07-07T23:13:13Z" -am 'create link'`)
-    await writeFileAtomic(filepath2, text1)
-    await exec(`git -C ${folder} add ${filename2}`)
-    await exec(`GIT_COMMITTER_DATE="2010-01-01T22:04:00Z" git -C ${folder} -c user.name="Name2" -c user.email=user2@example.com commit --author='User <user@example.com>' --date "2005-08-07T23:13:13Z" -am 'another file'`)
-    await exec(`mkdir -p ${path.join(folder, 'bin')}`)
-    await writeFileAtomic(path.join(folder, 'bin', 'script.js'), '#!/usr/bin/env node\nconsole.log(911)\n')
-    await exec(`chmod +x ${path.join(folder, 'bin', 'script.js')}`)
-    await exec(`git -C ${folder} add ${path.join('bin', 'script.js')}`)
-    await exec(`GIT_COMMITTER_DATE="2010-01-01T22:05:00Z" git -C ${folder} -c user.name="Name2" -c user.email=user2@example.com commit --author='User <user@example.com>' --date "2005-09-07T23:13:13Z" -am 'add script!'`)
+    await addGitRepoCommit(folder, renamedFilename, text2, 2, 'rename file')
+    await addGitRepoCommit(folder, `${renamedFilename}.link`, renamedFilename, 3, 'create link', { mode: 'link' })
+    await addGitRepoCommit(folder, 'sTest.txt', text1, 4, 'another file')
+    await addGitRepoCommit(folder, path.join('bin', 'script.js'), '#!/usr/bin/env node\nconsole.log(911)\n', 5, 'add script!', { chmod: '+x' })
 }
 
 const DEFAULT_PREPARE_GIT_REPO_HISTORY = [
