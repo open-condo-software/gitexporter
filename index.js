@@ -234,13 +234,10 @@ async function writeFile (path, buffer, permission) {
 
 function prepareLogData (commits) {
     const result = []
-    for (const { date, sha, newSha, author, committer, processing, message } of commits) {
+    for (const { date, sha, author, committer, message, processing } of commits) {
         if (!processing) break
-        const { tX, dt, paths, ignoredPaths, allowedPaths, index } = processing
         result.push({
-            index,
-            date, sha, newSha, tX, dt, paths, ignoredPaths, allowedPaths,
-            message: message.substring(0, 200),
+            date, sha,
             author: {
                 name: author.name(),
                 email: author.email(),
@@ -249,6 +246,8 @@ function prepareLogData (commits) {
                 name: committer.name(),
                 email: committer.email(),
             },
+            message: message.substring(0, 200),
+            processing,
         })
     }
 
@@ -256,8 +255,9 @@ function prepareLogData (commits) {
 }
 
 async function writeLogData (logFilePath, commits, filePaths, ignoredPaths, allowedPaths) {
+    const processedCommits = prepareLogData(commits)
     const data = JSON.stringify({
-        commits: prepareLogData(commits),
+        commits: processedCommits,
         paths: [...filePaths],
         ignoredPaths: [...ignoredPaths],
         allowedPaths: [...allowedPaths],
@@ -269,7 +269,7 @@ async function readLogData (logFilePath) {
     try {
         return JSON.parse(await fs.promises.readFile(logFilePath))
     } catch (e) {
-        return { commits: [], paths: [] }
+        return { commits: [] }
     }
 }
 
@@ -328,6 +328,11 @@ async function readOptions (config, args) {
     }
 }
 
+function exit (message, code = 1) {
+    console.error(message)
+    process.exit(code)
+}
+
 async function main (config, args) {
     const options = await readOptions(config, args)
     if (options.debug) DEBUG = true
@@ -336,18 +341,24 @@ async function main (config, args) {
     const ig = ignore().add(options.ignoredPaths)
     const al = ignore().add(options.allowedPaths)
 
-    if (options.forceReCreateRepo && fs.existsSync(options.targetRepoPath)) {
-        console.log('Remove existing repo:', options.targetRepoPath)
-        await fs.promises.rmdir(options.targetRepoPath, { recursive: true, force: true })
-    }
-
-    const targetRepo = await openOrInitRepo(options.targetRepoPath)
-    await stash(targetRepo)
     const existingLogState = await readLogData(options.logFilePath)
     const isFollowByLogFileFeatureEnabled = options.followByLogFile && !options.forceReCreateRepo && existingLogState.commits.length
     if (isFollowByLogFileFeatureEnabled) {
         console.log('Follow target repo state by log file:', existingLogState.commits.length, 'commits')
     }
+
+    if (options.forceReCreateRepo && fs.existsSync(options.targetRepoPath)) {
+        console.log('Remove existing repo:', options.targetRepoPath)
+        await fs.promises.rmdir(options.targetRepoPath, { recursive: true, force: true })
+    } else {
+        if (!isFollowByLogFileFeatureEnabled && fs.existsSync(options.targetRepoPath)) {
+            // We have some existing repo! with commits! it's unpredictable to add new commits is such case!
+            exit('ERROR: Target repository already exists and we does not have an export log file! The behavior will be non-deterministic. You can use `forceReCreateRepo` or remove existing target repo', 5)
+        }
+    }
+
+    const targetRepo = await openOrInitRepo(options.targetRepoPath)
+    await stash(targetRepo)
 
     const sourceRepo = await Git.Repository.open(options.sourceRepoPath)
     const commits = await getCommitHistory(await sourceRepo.getMasterCommit())
@@ -371,38 +382,51 @@ async function main (config, args) {
 
         if (isFollowLogOk && isFollowByLogFileFeatureEnabled) {
             const existingCommit = existingLogState.commits[commitIndex - 1]
-            if (existingCommit) {
-                const { sha, newSha } = existingCommit
+            if (existingCommit && existingCommit.processing) {
+                const sha = existingCommit.sha
+                const newSha = existingCommit.processing.newSha
                 const hasTargetCommit = await hasCommit(targetRepo, newSha)
                 const hasSourceCommit = await hasCommit(sourceRepo, sha)
                 if (hasTargetCommit && hasSourceCommit) {
                     lastFollowCommit = newSha
+                    // we also need to update commit.processing data
+                    commit.processing = existingCommit.processing
                     continue
                 } else {
                     isFollowLogOk = false
+                    if (!lastFollowCommit) exit('ERROR: Does not find any log commit! Try to use `forceReCreateRepo` mode or remove wrong log file!', 2)
                     await checkout(targetRepo, lastFollowCommit)
-                    console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
+                    console.log(`Follow log stopped! last commit ${commitIndex}/${commitLength} ${lastFollowCommit}`)
                 }
             } else {
                 isFollowLogOk = false
+                if (!lastFollowCommit) exit('ERROR: Does not find any log commit! Try to use `forceReCreateRepo` mode or remove wrong log file!', 2)
                 await checkout(targetRepo, lastFollowCommit)
-                console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
+                console.log(`Follow log stopped! last commit ${commitIndex}/${commitLength} ${lastFollowCommit}`)
             }
         }
 
-        let files = (commitIndex === -1) ? await getTreeFiles(sourceRepo, commit.sha) : await getDiffFiles(sourceRepo, commit.sha)
-        pathsLength = files.length
-        files.forEach(({ path }) => {
-            filePaths.add(path)
-            if (ig.ignores(path)) ignoredPaths.add(path)
-            if (al.ignores(path)) allowedPaths.add(path)
-        })
-
-        files = files.filter(({ path }) => !ig.ignores(path))
-        ignoredPathsLength = pathsLength - files.length
-
-        files = files.filter(({ path }) => al.ignores(path))
-        allowedPathsLength = files.length
+        pathsLength = 0
+        ignoredPathsLength = 0
+        allowedPathsLength = 0
+        const files = ((commitIndex === -1) ? await getTreeFiles(sourceRepo, commit.sha) : await getDiffFiles(sourceRepo, commit.sha))
+            .filter(({ path }) => {
+                let isOk = true
+                pathsLength++
+                filePaths.add(path)
+                if (ig.ignores(path)) {
+                    if (isOk) isOk = false
+                    ignoredPathsLength++
+                    ignoredPaths.add(path)
+                }
+                if (al.ignores(path)) {
+                    allowedPathsLength++
+                    allowedPaths.add(path)
+                } else {
+                    if (isOk) isOk = false
+                }
+                return isOk
+            })
 
         if (options.commitTransformer) await options.commitTransformer(commit, files)
 
@@ -411,21 +435,25 @@ async function main (config, args) {
 
         time1 = time2
         time2 = Date.now()
-        commit.newSha = newSha
         commit.processing = {
+            newSha,
+            index: `${commitIndex}/${commitLength}`,
             t0: time0,
             tX: time2,
-            index: commitIndex - 1,
             dt: time2 - time1,
             paths: pathsLength,
             ignoredPaths: ignoredPathsLength,
             allowedPaths: allowedPathsLength,
         }
 
-        await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths)
+        if (commitIndex % 50 === 0) {
+            await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths)
+            console.log(`Saved export state: ${commitIndex}/${commitLength}`)
+        }
     }
 
     await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths)
+    if (isFollowLogOk) console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
     console.log((options.dontShowTiming) ? 'Finish' : `Finish: total=${Date.now() - time0}ms;`)
 }
 
