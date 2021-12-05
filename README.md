@@ -1,4 +1,4 @@
-![gitexporter status](https://github.com/open-condo-software/gitexporter/actions/workflows/node.js.yml/badge.svg?branch=master)
+![npm status](https://img.shields.io/npm/v/gitexporter?color=%2332c954&label=gitexporter&logo=gitexporter&logoColor=%23414851) ![gitexporter test status](https://github.com/open-condo-software/gitexporter/actions/workflows/node.js.yml/badge.svg?branch=master)
 
 # gitexporter cli tool
 
