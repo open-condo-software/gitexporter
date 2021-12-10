@@ -164,6 +164,7 @@ test('gitexporter save git history', async () => {
         'bin/script.js',
     ])
     expect(logs.ignoredPaths).toEqual([])
+    expect(logs.skippedPaths).toEqual([])
     expect(logs.allowedPaths).toEqual([
         'test.txt',
         'Test.txt',
@@ -199,6 +200,11 @@ test('gitexporter allowed paths', async () => {
         'bin/script.js',
     ])
     expect(logs.ignoredPaths).toEqual([])
+    expect(logs.skippedPaths).toEqual([
+        "Test.txt.link",
+        "sTest.txt",
+        "bin/script.js"
+    ])
     expect(logs.allowedPaths).toEqual([
         'test.txt',
         'Test.txt',
@@ -282,6 +288,7 @@ test('gitexporter ignored paths', async () => {
         'test.txt',
         'Test.txt',
     ])
+    expect(logs.skippedPaths).toEqual([])
     expect(logs.allowedPaths).toEqual([
         'test.txt',
         'Test.txt',
@@ -371,6 +378,9 @@ test('gitexporter ignored and allowed paths', async () => {
         'test.txt',
         'Test.txt',
         'sTest.txt',
+    ])
+    expect(logs.skippedPaths).toEqual([
+        'Test.txt.link',
     ])
     expect(logs.allowedPaths).toEqual([
         'bin/script.js',
