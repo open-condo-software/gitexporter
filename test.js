@@ -570,6 +570,152 @@ test('gitexporter follow by logfile', async () => {
     ])
 })
 
+test('gitexporter follow by number of commits', async () => {
+    const folder = 'ignore.follow-by-number-of-commits'
+    const config = `{
+  "forceReCreateRepo": false,
+  "followByLogFile": false,
+  "followByNumberOfCommits": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["sTest.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config)
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish'],
+        ['WARN', 'Follow target repo state', 'Follow log stopped'],
+    )
+
+    expectLogPath(
+        `${folder}-target.log.json`,
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [
+            'Test.txt.link',
+            'sTest.txt',
+        ],
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [],
+    )
+
+    await addGitRepoCommit(folder, 'some-file.txt', 'hollo world!', 6, 'add hollo')
+
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by number of commits: 6 commits', 'Follow log stopped! last commit 7/7 46c01f27346ad1e77ffcc81e38b914ea17ae0395'],
+        ['WARN'],
+    )
+    expectLogPath(
+        `${folder}-target.log.json`,
+        [...DEFAULT_PREPARE_GIT_REPO_PATHS, ...['some-file.txt']],
+        [
+            'Test.txt.link',
+            'sTest.txt',
+        ],
+        [...DEFAULT_PREPARE_GIT_REPO_PATHS, ...['some-file.txt']],
+        [],
+    )
+
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['WARN'],
+    )
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['WARN'],
+    )
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['WARN'],
+    )
+
+    expectLogPath(
+        `${folder}-target.log.json`,
+        [...DEFAULT_PREPARE_GIT_REPO_PATHS, ...['some-file.txt']],
+        [
+            'Test.txt.link',
+            'sTest.txt',
+        ],
+        [...DEFAULT_PREPARE_GIT_REPO_PATHS, ...['some-file.txt']],
+        [],
+    )
+
+    await run(`git -C ${folder}-target log -p`, [
+        'commit 95655d5bd61e5d8c71acde522f28c0d46fb17330',
+        'Author: User <user@example.com>',
+        'Date:   Fri Oct 7 23:13:13 2005 +0000',
+        'add hollo',
+        'diff --git a/some-file.txt b/some-file.txt',
+        'new file mode 100644',
+        'index 0000000..ff0d2a6',
+        '--- /dev/null',
+        '+++ b/some-file.txt',
+        '@@ -0,0 +1 @@',
+        '+hollo world!',
+        '\\ No newline at end of file',
+        'commit 46c01f27346ad1e77ffcc81e38b914ea17ae0395',
+        'Author: User <user@example.com>',
+        'Date:   Wed Sep 7 23:13:13 2005 +0000',
+        'add script!',
+        'diff --git a/bin/script.js b/bin/script.js',
+        'new file mode 100755',
+        'index 0000000..ca29b27',
+        '--- /dev/null',
+        '+++ b/bin/script.js',
+        '@@ -0,0 +1,2 @@',
+        '+#!/usr/bin/env node',
+        '+console.log(911)',
+        'commit 427f8e83a1658852b8c6f4be99b4664976746aab',
+        'Author: User <user@example.com>',
+        'Date:   Sun Aug 7 23:13:13 2005 +0000',
+        'another file',
+        'commit f44ba5da1dae5ced415f214f92ec0ba3e4d25a20',
+        'Author: User <user@example.com>',
+        'Date:   Thu Jul 7 23:13:13 2005 +0000',
+        'create link',
+        'commit ee01df4e6cc73e4210e87c94b853a96103ca02c2',
+        'Author: User <user@example.com>',
+        'Date:   Tue Jun 7 23:13:13 2005 +0000',
+        'rename file',
+        'diff --git a/test.txt b/Test.txt',
+        'similarity index 100%',
+        'rename from test.txt',
+        'rename to Test.txt',
+        'commit d0dc86bea4f548db93905b71da1c6915594bfd5b',
+        'Author: User <user@example.com>',
+        'Date:   Sat May 7 23:13:13 2005 +0000',
+        'change initial text',
+        'diff --git a/test.txt b/test.txt',
+        'index 6dbb898..41c4a21 100644',
+        '--- a/test.txt',
+        '+++ b/test.txt',
+        '@@ -1 +1 @@',
+        '-Initial text',
+        '\\ No newline at end of file',
+        '+Changed text',
+        '\\ No newline at end of file',
+        'commit c731fd997376f68806c5cbe100edc7000acb75db',
+        'Author: User <user@example.com>',
+        'Date:   Thu Apr 7 22:13:13 2005 +0000',
+        'initial commit',
+        'diff --git a/test.txt b/test.txt',
+        'new file mode 100644',
+        'index 0000000..6dbb898',
+        '--- /dev/null',
+        '+++ b/test.txt',
+        '@@ -0,0 +1 @@',
+        '+Initial text',
+        '\\ No newline at end of file',
+    ])
+})
+
 test('gitexporter commitTransformer', async () => {
     const folder = 'ignore.commit-transformer'
     const config = `{
@@ -664,8 +810,8 @@ test('gitexporter commitTransformer', async () => {
     ])
 })
 
-test('gitexporter syncAllFilesOnLastFollowCommit: true', async () => {
-    const folder = 'ignore.sync-tree'
+test('gitexporter followByLogFile syncAllFilesOnLastFollowCommit: true', async () => {
+    const folder = 'ignore.sync-tree-by-log-true'
     const config1 = `{
   "forceReCreateRepo": false,
   "syncAllFilesOnLastFollowCommit": true,
@@ -760,8 +906,8 @@ test('gitexporter syncAllFilesOnLastFollowCommit: true', async () => {
     ])
 })
 
-test('gitexporter syncAllFilesOnLastFollowCommit: false', async () => {
-    const folder = 'ignore.sync-tree'
+test('gitexporter followByLogFile syncAllFilesOnLastFollowCommit: false', async () => {
+    const folder = 'ignore.sync-tree-by-log-false'
     const config1 = `{
   "forceReCreateRepo": false,
   "syncAllFilesOnLastFollowCommit": false,
@@ -790,6 +936,194 @@ test('gitexporter syncAllFilesOnLastFollowCommit: false', async () => {
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
         ['Finish', 'Follow target repo state by log file: 6 commits', 'Follow log stopped! last commit 7/7 449f22bdf5add1e83d1a30d50afa924c23cbe5ac'],
+    )
+
+    await run(`git -C ${folder}-target log -p`, [
+        'commit b069f0fcd71c14ff76d60a9a64c04a1d8b1c2472',
+        'Author: User <user@example.com>',
+        'Date:   Fri Oct 7 23:13:13 2005 +0000',
+        'add hollo',
+        'diff --git a/some-file.txt b/some-file.txt',
+        'new file mode 100644',
+        'index 0000000..ff0d2a6',
+        '--- /dev/null',
+        '+++ b/some-file.txt',
+        '@@ -0,0 +1 @@',
+        '+hollo world!',
+        '\\ No newline at end of file',
+        'commit 449f22bdf5add1e83d1a30d50afa924c23cbe5ac',
+        'Author: User <user@example.com>',
+        'Date:   Wed Sep 7 23:13:13 2005 +0000',
+        'add script!',
+        'diff --git a/bin/script.js b/bin/script.js',
+        'new file mode 100755',
+        'index 0000000..ca29b27',
+        '--- /dev/null',
+        '+++ b/bin/script.js',
+        '@@ -0,0 +1,2 @@',
+        '+#!/usr/bin/env node',
+        '+console.log(911)',
+        'commit 3abcc91755c2232f1a481ad330a419d7820f8a0c',
+        'Author: User <user@example.com>',
+        'Date:   Sun Aug 7 23:13:13 2005 +0000',
+        'another file',
+        'diff --git a/sTest.txt b/sTest.txt',
+        'new file mode 100644',
+        'index 0000000..6dbb898',
+        '--- /dev/null',
+        '+++ b/sTest.txt',
+        '@@ -0,0 +1 @@',
+        '+Initial text',
+        '\\ No newline at end of file',
+        'commit d6f6abe8b06b56013246276299a9671213671ee0',
+        'Author: User <user@example.com>',
+        'Date:   Thu Jul 7 23:13:13 2005 +0000',
+        'create link',
+        'commit f995e7171c59eca6d1c664cfa4b074a117109cf5',
+        'Author: User <user@example.com>',
+        'Date:   Tue Jun 7 23:13:13 2005 +0000',
+        'rename file',
+        'commit 8e4da0cc03de0ae8f434a878a00eb9d600d3de56',
+        'Author: User <user@example.com>',
+        'Date:   Sat May 7 23:13:13 2005 +0000',
+        'change initial text',
+        'commit 2ddd8f9d41399241dec8f4dce64e6365335baa1f',
+        'Author: User <user@example.com>',
+        'Date:   Thu Apr 7 22:13:13 2005 +0000',
+        'initial commit',
+    ])
+})
+
+test('gitexporter followByNumberOfCommits syncAllFilesOnLastFollowCommit: true', async () => {
+    const folder = 'ignore.sync-tree-by-number-true'
+    const config1 = `{
+  "forceReCreateRepo": false,
+  "syncAllFilesOnLastFollowCommit": true,
+  "followByLogFile": false,  
+  "followByNumberOfCommits": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+
+    const config2 = `{
+  "forceReCreateRepo": false,
+  "syncAllFilesOnLastFollowCommit": true,
+  "followByLogFile": false,  
+  "followByNumberOfCommits": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "allowedPaths": ["*"]
+}`
+    await writeFileAtomic(`${folder}.config.json`, config2)
+    await addGitRepoCommit(folder, 'some-file.txt', 'hollo world!', 6, 'add hollo')
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by number of commits: 6 commits', 'Follow log stopped! last commit 7/7 449f22bdf5add1e83d1a30d50afa924c23cbe5ac'],
+    )
+
+    await run(`git -C ${folder}-target log -p`, [
+        'commit 61d9922a45251600a04ed4d5f082610f21cdd107',
+        'Author: User <user@example.com>',
+        'Date:   Fri Oct 7 23:13:13 2005 +0000',
+        'add hollo',
+        'diff --git a/Test.txt b/Test.txt',
+        'new file mode 100644',
+        'index 0000000..41c4a21',
+        '--- /dev/null',
+        '+++ b/Test.txt',
+        '@@ -0,0 +1 @@',
+        '+Changed text',
+        '\\ No newline at end of file',
+        'diff --git a/some-file.txt b/some-file.txt',
+        'new file mode 100644',
+        'index 0000000..ff0d2a6',
+        '--- /dev/null',
+        '+++ b/some-file.txt',
+        '@@ -0,0 +1 @@',
+        '+hollo world!',
+        '\\ No newline at end of file',
+        'commit 449f22bdf5add1e83d1a30d50afa924c23cbe5ac',
+        'Author: User <user@example.com>',
+        'Date:   Wed Sep 7 23:13:13 2005 +0000',
+        'add script!',
+        'diff --git a/bin/script.js b/bin/script.js',
+        'new file mode 100755',
+        'index 0000000..ca29b27',
+        '--- /dev/null',
+        '+++ b/bin/script.js',
+        '@@ -0,0 +1,2 @@',
+        '+#!/usr/bin/env node',
+        '+console.log(911)',
+        'commit 3abcc91755c2232f1a481ad330a419d7820f8a0c',
+        'Author: User <user@example.com>',
+        'Date:   Sun Aug 7 23:13:13 2005 +0000',
+        'another file',
+        'diff --git a/sTest.txt b/sTest.txt',
+        'new file mode 100644',
+        'index 0000000..6dbb898',
+        '--- /dev/null',
+        '+++ b/sTest.txt',
+        '@@ -0,0 +1 @@',
+        '+Initial text',
+        '\\ No newline at end of file',
+        'commit d6f6abe8b06b56013246276299a9671213671ee0',
+        'Author: User <user@example.com>',
+        'Date:   Thu Jul 7 23:13:13 2005 +0000',
+        'create link',
+        'commit f995e7171c59eca6d1c664cfa4b074a117109cf5',
+        'Author: User <user@example.com>',
+        'Date:   Tue Jun 7 23:13:13 2005 +0000',
+        'rename file',
+        'commit 8e4da0cc03de0ae8f434a878a00eb9d600d3de56',
+        'Author: User <user@example.com>',
+        'Date:   Sat May 7 23:13:13 2005 +0000',
+        'change initial text',
+        'commit 2ddd8f9d41399241dec8f4dce64e6365335baa1f',
+        'Author: User <user@example.com>',
+        'Date:   Thu Apr 7 22:13:13 2005 +0000',
+        'initial commit',
+    ])
+})
+
+test('gitexporter followByNumberOfCommits syncAllFilesOnLastFollowCommit: false', async () => {
+    const folder = 'ignore.sync-tree-by-log-false'
+    const config1 = `{
+  "forceReCreateRepo": false,
+  "syncAllFilesOnLastFollowCommit": false,
+  "followByLogFile": false,  
+  "followByNumberOfCommits": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+
+    const config2 = `{
+  "forceReCreateRepo": false,
+  "syncAllFilesOnLastFollowCommit": false,
+  "followByLogFile": false,  
+  "followByNumberOfCommits": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "allowedPaths": ["*"]
+}`
+    await writeFileAtomic(`${folder}.config.json`, config2)
+    await addGitRepoCommit(folder, 'some-file.txt', 'hollo world!', 6, 'add hollo')
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Finish', 'Follow target repo state by number of commits: 6 commits', 'Follow log stopped! last commit 7/7 449f22bdf5add1e83d1a30d50afa924c23cbe5ac'],
     )
 
     await run(`git -C ${folder}-target log -p`, [
