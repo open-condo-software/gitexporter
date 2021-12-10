@@ -55,6 +55,13 @@ async function prepareGitRepo (folder) {
     await addGitRepoCommit(folder, path.join('bin', 'script.js'), '#!/usr/bin/env node\nconsole.log(911)\n', 5, 'add script!', { chmod: '+x' })
 }
 
+const DEFAULT_PREPARE_GIT_REPO_PATHS = [
+    'test.txt',
+    'Test.txt',
+    'Test.txt.link',
+    'sTest.txt',
+    'bin/script.js',
+]
 const DEFAULT_PREPARE_GIT_REPO_HISTORY = [
     'commit 43a8998c57a1885fb9bb4ae8342b2e8a9285f002',
     'Author: User <user@example.com>',
@@ -143,6 +150,14 @@ test('prepareGitRepo()', async () => {
     await run(`git -C ${folder} log -p`, DEFAULT_PREPARE_GIT_REPO_HISTORY)
 })
 
+function expectLogPath (path, paths, ignoredPaths, allowedPaths, skippedPaths) {
+    const logs = JSON.parse(fs.readFileSync(path, { encoding: 'utf-8' }))
+    expect(logs.paths).toEqual(paths)
+    expect(logs.ignoredPaths).toEqual(ignoredPaths)
+    expect(logs.allowedPaths).toEqual(allowedPaths)
+    expect(logs.skippedPaths).toEqual(skippedPaths)
+}
+
 test('gitexporter save git history', async () => {
     const folder = 'ignore.save-history'
     const config = `{
@@ -155,23 +170,19 @@ test('gitexporter save git history', async () => {
     await writeFileAtomic(`${folder}.config.json`, config)
     await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
 
-    const logs = JSON.parse(fs.readFileSync(`${folder}-target.log.json`, { encoding: 'utf-8' }))
-    expect(logs.paths).toEqual([
-        'test.txt',
-        'Test.txt',
-        'Test.txt.link',
-        'sTest.txt',
-        'bin/script.js',
-    ])
-    expect(logs.ignoredPaths).toEqual([])
-    expect(logs.skippedPaths).toEqual([])
-    expect(logs.allowedPaths).toEqual([
-        'test.txt',
-        'Test.txt',
-        'Test.txt.link',
-        'sTest.txt',
-        'bin/script.js',
-    ])
+    expectLogPath(
+        `${folder}-target.log.json`,
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [],
+        [
+            'test.txt',
+            'Test.txt',
+            'Test.txt.link',
+            'sTest.txt',
+            'bin/script.js',
+        ],
+        [],
+    )
 
     await run(`git -C ${folder}-target log -p`, DEFAULT_PREPARE_GIT_REPO_HISTORY)
 })
@@ -191,24 +202,20 @@ test('gitexporter allowed paths', async () => {
 
     await run(`ls -a ${folder}-target`, ['.', '..', '.git', 'Test.txt'])
 
-    const logs = JSON.parse(fs.readFileSync(`${folder}-target.log.json`, { encoding: 'utf-8' }))
-    expect(logs.paths).toEqual([
-        'test.txt',
-        'Test.txt',
-        'Test.txt.link',
-        'sTest.txt',
-        'bin/script.js',
-    ])
-    expect(logs.ignoredPaths).toEqual([])
-    expect(logs.skippedPaths).toEqual([
-        'Test.txt.link',
-        'sTest.txt',
-        'bin/script.js',
-    ])
-    expect(logs.allowedPaths).toEqual([
-        'test.txt',
-        'Test.txt',
-    ])
+    expectLogPath(
+        `${folder}-target.log.json`,
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [],
+        [
+            'test.txt',
+            'Test.txt',
+        ],
+        [
+            'Test.txt.link',
+            'sTest.txt',
+            'bin/script.js',
+        ],
+    )
 
     // NOTE: probably may have some differences on register sensitive filepath filesystems?!
     await run(`git -C ${folder}-target log -p`, [
@@ -276,26 +283,16 @@ test('gitexporter ignored paths', async () => {
 
     await run(`ls -a ${folder}-target`, ['.', '..', '.git', 'Test.txt.link', 'bin', 'sTest.txt'])
 
-    const logs = JSON.parse(fs.readFileSync(`${folder}-target.log.json`, { encoding: 'utf-8' }))
-    expect(logs.paths).toEqual([
-        'test.txt',
-        'Test.txt',
-        'Test.txt.link',
-        'sTest.txt',
-        'bin/script.js',
-    ])
-    expect(logs.ignoredPaths).toEqual([
-        'test.txt',
-        'Test.txt',
-    ])
-    expect(logs.skippedPaths).toEqual([])
-    expect(logs.allowedPaths).toEqual([
-        'test.txt',
-        'Test.txt',
-        'Test.txt.link',
-        'sTest.txt',
-        'bin/script.js',
-    ])
+    expectLogPath(
+        `${folder}-target.log.json`,
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [
+            'test.txt',
+            'Test.txt',
+        ],
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [],
+    )
 
     await run(`git -C ${folder}-target log -p`, [
         'commit 57662116ed2bfa91dadce6eff592866add37484a',
@@ -366,25 +363,21 @@ test('gitexporter ignored and allowed paths', async () => {
 
     await run(`ls -a ${folder}-target`, ['.', '..', '.git', 'bin'])
 
-    const logs = JSON.parse(fs.readFileSync(`${folder}-target.log.json`, { encoding: 'utf-8' }))
-    expect(logs.paths).toEqual([
-        'test.txt',
-        'Test.txt',
-        'Test.txt.link',
-        'sTest.txt',
-        'bin/script.js',
-    ])
-    expect(logs.ignoredPaths).toEqual([
-        'test.txt',
-        'Test.txt',
-        'sTest.txt',
-    ])
-    expect(logs.skippedPaths).toEqual([
-        'Test.txt.link',
-    ])
-    expect(logs.allowedPaths).toEqual([
-        'bin/script.js',
-    ])
+    expectLogPath(
+        `${folder}-target.log.json`,
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [
+            'test.txt',
+            'Test.txt',
+            'sTest.txt',
+        ],
+        [
+            'bin/script.js',
+        ],
+        [
+            'Test.txt.link',
+        ],
+    )
 
     await run(`git -C ${folder}-target log -p`, [
         'commit 7917736a48e49c96b1cdc50847f80885df814300',
@@ -456,12 +449,33 @@ test('gitexporter follow by logfile', async () => {
         ['Follow target repo state', 'Follow log stopped'],
     )
 
+    expectLogPath(
+        `${folder}-target.log.json`,
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [
+            'Test.txt.link',
+            'sTest.txt',
+        ],
+        DEFAULT_PREPARE_GIT_REPO_PATHS,
+        [],
+    )
+
     await addGitRepoCommit(folder, 'some-file.txt', 'hollo world!', 6, 'add hollo')
 
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
         ['Finish', 'Follow target repo state by log file: 6 commits', 'Follow log stopped! last commit 7/7 46c01f27346ad1e77ffcc81e38b914ea17ae0395'],
     )
+    expectLogPath(
+        `${folder}-target.log.json`,
+        [...DEFAULT_PREPARE_GIT_REPO_PATHS, ...['some-file.txt']],
+        [
+            'Test.txt.link',
+            'sTest.txt',
+        ],
+        [...DEFAULT_PREPARE_GIT_REPO_PATHS, ...['some-file.txt']],
+        [],
+    )
 
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
@@ -474,6 +488,17 @@ test('gitexporter follow by logfile', async () => {
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
         ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+    )
+
+    expectLogPath(
+        `${folder}-target.log.json`,
+        [...DEFAULT_PREPARE_GIT_REPO_PATHS, ...['some-file.txt']],
+        [
+            'Test.txt.link',
+            'sTest.txt',
+        ],
+        [...DEFAULT_PREPARE_GIT_REPO_PATHS, ...['some-file.txt']],
+        [],
     )
 
     await run(`git -C ${folder}-target log -p`, [

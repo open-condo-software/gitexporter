@@ -413,10 +413,10 @@ async function main (config, args) {
     let isFollowLogOk = true
     let lastFollowCommit = null
     let syncTreeCommitIndex = -1
-    const filePaths = new Set()
-    const ignoredPaths = new Set()
-    const allowedPaths = new Set()
-    const skippedPaths = new Set()
+    const filePaths = (isFollowByLogFileFeatureEnabled && existingLogState.paths) ? new Set(existingLogState.paths) : new Set()
+    const ignoredPaths = (isFollowByLogFileFeatureEnabled && existingLogState.ignoredPaths) ? new Set(existingLogState.ignoredPaths) : new Set()
+    const allowedPaths = (isFollowByLogFileFeatureEnabled && existingLogState.allowedPaths) ? new Set(existingLogState.allowedPaths) : new Set()
+    const skippedPaths = (isFollowByLogFileFeatureEnabled && existingLogState.skippedPaths) ? new Set(existingLogState.skippedPaths) :  new Set()
     for (const commit of commits) {
 
         console.log(`Processing: ${++commitIndex}/${commitLength}`, commit.sha, (options.dontShowTiming) ? '' : `~${Math.round((time2 - time0) / commitIndex)}ms; ${(time2 - time1)}ms`)
