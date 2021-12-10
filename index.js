@@ -270,13 +270,14 @@ function prepareLogData (commits) {
     return result
 }
 
-async function writeLogData (logFilePath, commits, filePaths, ignoredPaths, allowedPaths) {
+async function writeLogData (logFilePath, commits, filePaths, ignoredPaths, allowedPaths, skippedPaths) {
     const processedCommits = prepareLogData(commits)
     const data = JSON.stringify({
-        commits: processedCommits,
         paths: [...filePaths],
         ignoredPaths: [...ignoredPaths],
         allowedPaths: [...allowedPaths],
+        skippedPaths: [...skippedPaths],
+        commits: processedCommits,
     }, null, 2)
     await writeFileAtomic(logFilePath, data)
 }
@@ -392,6 +393,7 @@ async function main (config, args) {
     const filePaths = new Set()
     const ignoredPaths = new Set()
     const allowedPaths = new Set()
+    const skippedPaths = new Set()
     for (const commit of commits) {
 
         console.log(`Processing: ${++commitIndex}/${commitLength}`, commit.sha, (options.dontShowTiming) ? '' : `~${Math.round((time2 - time0) / commitIndex)}ms; ${(time2 - time1)}ms`)
@@ -439,7 +441,10 @@ async function main (config, args) {
                     allowedPathsLength++
                     allowedPaths.add(path)
                 } else {
-                    if (isOk) isOk = false
+                    if (isOk) {
+                        skippedPaths.add(path)
+                        isOk = false
+                    }
                 }
                 return isOk
             })
@@ -463,12 +468,12 @@ async function main (config, args) {
         }
 
         if (commitIndex % 50 === 0) {
-            await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths)
+            await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths, skippedPaths)
             console.log(`Saved export state: ${commitIndex}/${commitLength}`)
         }
     }
 
-    await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths)
+    await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths, skippedPaths)
     if (isFollowLogOk && isFollowByLogFileFeatureEnabled) console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
     console.log((options.dontShowTiming) ? 'Finish' : `Finish: total=${Date.now() - time0}ms;`)
 }
