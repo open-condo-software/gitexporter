@@ -317,6 +317,18 @@ async function stash (repo) {
     }
 }
 
+function requireResolvePaths (paths) {
+    for (const path of paths) {
+        try {
+            require(path)
+            return path
+        } catch (error) {
+            if (DEBUG) console.warn(error)
+        }
+    }
+    return null
+}
+
 async function readOptions (config, args) {
     const data = fs.readFileSync(config)
     const options = JSON.parse(data)
@@ -330,7 +342,15 @@ async function readOptions (config, args) {
     const allowedPaths = options.allowedPaths || ['*']
     const ignoredPaths = options.ignoredPaths || []
     let commitTransformer = options.commitTransformer || null
-    if (commitTransformer) commitTransformer = require(commitTransformer)
+    if (commitTransformer) {
+        commitTransformer = requireResolvePaths([
+            commitTransformer,
+            path.join(config, '..', commitTransformer),
+            path.join(process.cwd(), commitTransformer),
+        ])
+        if (!commitTransformer) exit(`ERROR: can't import "commitTransformer" module. Try to use path related to ${config} file`)
+        commitTransformer = require(commitTransformer)
+    }
     return {
         debug,
         dontShowTiming,
