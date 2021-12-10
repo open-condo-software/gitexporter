@@ -63,6 +63,7 @@ async function reWriteFilesInRepo (repoPath, files) {
 }
 
 async function getCommitHistory (repo) {
+    if (!repo) return []
     const history = repo.history(Git.Revwalk.SORT.REVERSE)
     const result = []
     return new Promise((res, rej) => {
@@ -339,7 +340,8 @@ async function readOptions (config, args) {
     const logFilePath = options.logFilePath || targetRepoPath + '.log.json'
     const forceReCreateRepo = options.forceReCreateRepo || false
     const syncAllFilesOnLastFollowCommit = options.syncAllFilesOnLastFollowCommit || false
-    const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || true
+    const followByNumberOfCommits = (forceReCreateRepo) ? false : (options.followByLogFile) ? false : options.followByNumberOfCommits || false
+    const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || ((!followByNumberOfCommits))
     const allowedPaths = options.allowedPaths || ['*']
     const ignoredPaths = options.ignoredPaths || []
     let commitTransformer = options.commitTransformer || null
@@ -357,6 +359,7 @@ async function readOptions (config, args) {
         dontShowTiming,
         forceReCreateRepo,
         followByLogFile,
+        followByNumberOfCommits,
         syncAllFilesOnLastFollowCommit,
         targetRepoPath,
         sourceRepoPath,
@@ -381,18 +384,53 @@ async function main (config, args) {
     const al = ignore().add(options.allowedPaths)
 
     const existingLogState = await readLogData(options.logFilePath)
-    const isFollowByLogFileFeatureEnabled = options.followByLogFile && !options.forceReCreateRepo && existingLogState.commits.length
-    if (isFollowByLogFileFeatureEnabled) {
-        console.log('Follow target repo state by log file:', existingLogState.commits.length, 'commits')
-    }
+    const isTargetRepoExists = fs.existsSync(options.targetRepoPath)
 
-    if (options.forceReCreateRepo && fs.existsSync(options.targetRepoPath)) {
-        console.log('Remove existing repo:', options.targetRepoPath)
-        await fs.promises.rmdir(options.targetRepoPath, { recursive: true, force: true })
+    let isFollowByLogFileFeatureEnabled = options.followByLogFile && !options.forceReCreateRepo
+
+    let isFollowByNumberOfCommits = options.followByNumberOfCommits && !options.forceReCreateRepo
+
+    if (options.forceReCreateRepo) {
+        if (isTargetRepoExists) {
+            console.log('Remove existing repo:', options.targetRepoPath)
+            await fs.promises.rmdir(options.targetRepoPath, { recursive: true, force: true })
+        }
     } else {
-        if (!isFollowByLogFileFeatureEnabled && fs.existsSync(options.targetRepoPath)) {
-            // We have some existing repo! with commits! it's unpredictable to add new commits is such case!
-            exit('ERROR: Target repository already exists and we does not have an export log file! The behavior will be non-deterministic. You can use `forceReCreateRepo` or remove existing target repo', 5)
+        if (isFollowByLogFileFeatureEnabled && isFollowByNumberOfCommits) exit('ERROR: Config error! The behavior will be non-deterministic. You want to follow by log file and follow by number of commits! Choose one or use `forceReCreateRepo`', 5)
+
+        // forceReCreateRepo = false
+        if (isTargetRepoExists) {
+            // We have some existing repo! with commits! Cases:
+            //  1) follow by log
+            //  2) follow by number of commits
+            //  3) unpredictable to add new commits is such case!
+
+            if (isFollowByLogFileFeatureEnabled) {
+                if (existingLogState.commits.length === 0) exit('ERROR: Config error! You want to follow by log file with zero commits and existing target repo! Remove existing target repo or use `forceReCreateRepo`', 5)
+            } else if (isFollowByNumberOfCommits) {
+                // pass
+            } else {
+                exit('ERROR: Target repository already exists and you disable `followByLogFile` and `followByNumberOfCommits` features! The behavior will be non-deterministic. You can use `forceReCreateRepo` or remove existing target repo', 5)
+            }
+        } else {
+            // We doesn't have a target repo! Cases:
+            //  1) first running with follow by log
+            //  2) first running with number of commits
+            //  3) running without following and without force!
+
+            if (isFollowByLogFileFeatureEnabled) {
+                if (existingLogState.commits.length === 0) {
+                    // we don't have commits inside the log and we don't have an existing repo! no need to follow!
+                    isFollowByLogFileFeatureEnabled = false
+                } else {
+                    exit('ERROR: Target repository does not exists but you already have an enable `followByLogFile` feature with existing log file commits! The behavior will be non-deterministic. You can use `forceReCreateRepo` or remove the existing log file', 5)
+                }
+            } else if (isFollowByNumberOfCommits) {
+                // it's ok! no repo no number of commits! no need to follow!
+                isFollowByNumberOfCommits = false
+            } else {
+                // pass
+            }
         }
     }
 
@@ -400,7 +438,26 @@ async function main (config, args) {
     await stash(targetRepo)
 
     const sourceRepo = await Git.Repository.open(options.sourceRepoPath)
-    const commits = await getCommitHistory(await sourceRepo.getMasterCommit())
+
+    const sourceHeadCommit = await sourceRepo.getHeadCommit()
+    const commits = await getCommitHistory(sourceHeadCommit) // getHeadCommit ?
+    const targetHeadCommit = await targetRepo.getHeadCommit()
+    const targetCommits = await getCommitHistory(targetHeadCommit) // getHeadCommit ?
+
+    if (isFollowByLogFileFeatureEnabled) {
+        if (existingLogState.commits.length === 0) {
+            isFollowByLogFileFeatureEnabled = false
+        } else {
+            console.log('Follow target repo state by log file:', existingLogState.commits.length, 'commits')
+        }
+    }
+    if (isFollowByNumberOfCommits) {
+        if (targetCommits.length === 0) {
+            isFollowByNumberOfCommits = false
+        } else {
+            console.log('Follow target repo state by number of commits:', targetCommits.length, 'commits')
+        }
+    }
 
     let commitIndex = 0
     const commitLength = commits.length
@@ -410,18 +467,18 @@ async function main (config, args) {
     let pathsLength = 0
     let ignoredPathsLength = 0
     let allowedPathsLength = 0
-    let isFollowLogOk = true
+    let isFollowByOk = true
     let lastFollowCommit = null
     let syncTreeCommitIndex = -1
-    const filePaths = (isFollowByLogFileFeatureEnabled && existingLogState.paths) ? new Set(existingLogState.paths) : new Set()
-    const ignoredPaths = (isFollowByLogFileFeatureEnabled && existingLogState.ignoredPaths) ? new Set(existingLogState.ignoredPaths) : new Set()
-    const allowedPaths = (isFollowByLogFileFeatureEnabled && existingLogState.allowedPaths) ? new Set(existingLogState.allowedPaths) : new Set()
-    const skippedPaths = (isFollowByLogFileFeatureEnabled && existingLogState.skippedPaths) ? new Set(existingLogState.skippedPaths) :  new Set()
+    const filePaths = ((isFollowByLogFileFeatureEnabled || isFollowByNumberOfCommits) && existingLogState.paths) ? new Set(existingLogState.paths) : new Set()
+    const ignoredPaths = ((isFollowByLogFileFeatureEnabled || isFollowByNumberOfCommits) && existingLogState.ignoredPaths) ? new Set(existingLogState.ignoredPaths) : new Set()
+    const allowedPaths = ((isFollowByLogFileFeatureEnabled || isFollowByNumberOfCommits) && existingLogState.allowedPaths) ? new Set(existingLogState.allowedPaths) : new Set()
+    const skippedPaths = ((isFollowByLogFileFeatureEnabled || isFollowByNumberOfCommits) && existingLogState.skippedPaths) ? new Set(existingLogState.skippedPaths) : new Set()
     for (const commit of commits) {
 
         console.log(`Processing: ${++commitIndex}/${commitLength}`, commit.sha, (options.dontShowTiming) ? '' : `~${Math.round((time2 - time0) / commitIndex)}ms; ${(time2 - time1)}ms`)
 
-        if (isFollowLogOk && isFollowByLogFileFeatureEnabled) {
+        if (isFollowByOk && isFollowByLogFileFeatureEnabled) {
             const existingCommit = existingLogState.commits[commitIndex - 1]
             if (existingCommit && existingCommit.processing) {
                 const sha = existingCommit.sha
@@ -434,16 +491,38 @@ async function main (config, args) {
                     commit.processing = existingCommit.processing
                     continue
                 } else {
-                    isFollowLogOk = false
+                    isFollowByOk = false
                     if (!lastFollowCommit) exit('ERROR: Does not find any log commit! Try to use `forceReCreateRepo` mode or remove wrong log file!', 2)
                     await checkout(targetRepo, lastFollowCommit)
                     if (options.syncAllFilesOnLastFollowCommit) syncTreeCommitIndex = commitIndex
                     console.log(`Follow log stopped! last commit ${commitIndex}/${commitLength} ${lastFollowCommit}`)
                 }
             } else {
-                isFollowLogOk = false
+                isFollowByOk = false
                 if (!lastFollowCommit) exit('ERROR: Does not find any log commit! Try to use `forceReCreateRepo` mode or remove wrong log file!', 2)
                 await checkout(targetRepo, lastFollowCommit)
+                if (options.syncAllFilesOnLastFollowCommit) syncTreeCommitIndex = commitIndex
+                console.log(`Follow log stopped! last commit ${commitIndex}/${commitLength} ${lastFollowCommit}`)
+            }
+        }
+
+        if (isFollowByOk && isFollowByNumberOfCommits) {
+            const targetCommit = targetCommits[commitIndex - 1]
+            if (targetCommit) {
+                const existingLogCommit = existingLogState.commits[commitIndex - 1]
+                if (existingLogCommit && existingLogCommit.processing) {
+                    commit.processing = existingLogCommit.processing
+                } else {
+                    commit.processing = {
+                        index: `${commitIndex}/${commitLength}`,
+                    }
+                }
+                if (commit.processing.newSha !== targetCommit.sha) console.warn(`WARN: log file commit sha ${commit.processing.newSha} != target commit sha ${targetCommit.sha}`)
+                commit.processing.newSha = targetCommit.sha
+                lastFollowCommit = targetCommit.sha
+                continue
+            } else {
+                isFollowByOk = false
                 if (options.syncAllFilesOnLastFollowCommit) syncTreeCommitIndex = commitIndex
                 console.log(`Follow log stopped! last commit ${commitIndex}/${commitLength} ${lastFollowCommit}`)
             }
@@ -499,7 +578,7 @@ async function main (config, args) {
     }
 
     await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths, skippedPaths)
-    if (isFollowLogOk && isFollowByLogFileFeatureEnabled) console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
+    if (isFollowByOk && (isFollowByLogFileFeatureEnabled || isFollowByNumberOfCommits)) console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
     console.log((options.dontShowTiming) ? 'Finish' : `Finish: total=${Date.now() - time0}ms;`)
 }
 
