@@ -338,6 +338,7 @@ async function readOptions (config, args) {
     const sourceRepoPath = options.sourceRepoPath || '.'
     const logFilePath = options.logFilePath || targetRepoPath + '.log.json'
     const forceReCreateRepo = options.forceReCreateRepo || false
+    const syncAllFilesOnLastFollowCommit = options.syncAllFilesOnLastFollowCommit || false
     const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || true
     const allowedPaths = options.allowedPaths || ['*']
     const ignoredPaths = options.ignoredPaths || []
@@ -356,6 +357,7 @@ async function readOptions (config, args) {
         dontShowTiming,
         forceReCreateRepo,
         followByLogFile,
+        syncAllFilesOnLastFollowCommit,
         targetRepoPath,
         sourceRepoPath,
         logFilePath,
@@ -410,6 +412,7 @@ async function main (config, args) {
     let allowedPathsLength = 0
     let isFollowLogOk = true
     let lastFollowCommit = null
+    let syncTreeCommitIndex = -1
     const filePaths = new Set()
     const ignoredPaths = new Set()
     const allowedPaths = new Set()
@@ -434,12 +437,14 @@ async function main (config, args) {
                     isFollowLogOk = false
                     if (!lastFollowCommit) exit('ERROR: Does not find any log commit! Try to use `forceReCreateRepo` mode or remove wrong log file!', 2)
                     await checkout(targetRepo, lastFollowCommit)
+                    if (options.syncAllFilesOnLastFollowCommit) syncTreeCommitIndex = commitIndex
                     console.log(`Follow log stopped! last commit ${commitIndex}/${commitLength} ${lastFollowCommit}`)
                 }
             } else {
                 isFollowLogOk = false
                 if (!lastFollowCommit) exit('ERROR: Does not find any log commit! Try to use `forceReCreateRepo` mode or remove wrong log file!', 2)
                 await checkout(targetRepo, lastFollowCommit)
+                if (options.syncAllFilesOnLastFollowCommit) syncTreeCommitIndex = commitIndex
                 console.log(`Follow log stopped! last commit ${commitIndex}/${commitLength} ${lastFollowCommit}`)
             }
         }
@@ -447,7 +452,7 @@ async function main (config, args) {
         pathsLength = 0
         ignoredPathsLength = 0
         allowedPathsLength = 0
-        const files = ((commitIndex === -1) ? await getTreeFiles(sourceRepo, commit.sha) : await getDiffFiles(sourceRepo, commit.sha))
+        const files = ((commitIndex === syncTreeCommitIndex) ? await getTreeFiles(sourceRepo, commit.sha) : await getDiffFiles(sourceRepo, commit.sha))
             .filter(({ path }) => {
                 let isOk = true
                 pathsLength++
