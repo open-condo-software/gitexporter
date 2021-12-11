@@ -1393,3 +1393,282 @@ test('gitexporter followByNumberOfCommits syncAllFilesOnLastFollowCommit: false'
         'initial commit',
     ])
 })
+
+test('gitexporter followByLogFile & followByNumberOfCommits error', async () => {
+    const folder = 'ignore.error-1'
+    const config1 = `{
+  "forceReCreateRepo": false,
+  "syncAllFilesOnLastFollowCommit": false,
+  "followByLogFile": true,  
+  "followByNumberOfCommits": true,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    try {
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+        expect(true).toBe(false)
+    } catch (e) {
+        expect(e.stderr).toEqual('ERROR: can\'t use followByLogFile=true and followByNumberOfCommits=true simultaneously. Choose one or use forceReCreateRepo=true\n')
+        expect(e.code).toEqual(8)
+        expect(e.killed).toEqual(false)
+    }
+})
+
+test('gitexporter commitTransformer type error', async () => {
+    const folder = 'ignore.error-2'
+    const config1 = `{
+  "forceReCreateRepo": false,
+  "commitTransformer": true,  
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    try {
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+        expect(true).toBe(false)
+    } catch (e) {
+        expect(e.stderr).toEqual('ERROR: wrong "commitTransformer" value type. Try to use path related to ignore.error-2.config.json file\n')
+        expect(e.code).toEqual(8)
+        expect(e.killed).toEqual(false)
+    }
+})
+
+test('gitexporter commitTransformer path error', async () => {
+    const folder = 'ignore.error-3'
+    const config1 = `{
+  "forceReCreateRepo": false,
+  "commitTransformer": "waawfawfawfafawfawfawfawffawf",  
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    try {
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+        expect(true).toBe(false)
+    } catch (e) {
+        expect(e.stderr).toEqual('ERROR: can\'t import "commitTransformer" module. Try to use path related to ignore.error-3.config.json file\n')
+        expect(e.code).toEqual(8)
+        expect(e.killed).toEqual(false)
+    }
+})
+
+test('gitexporter default config.json values', async () => {
+    const folder = 'ignore.default-1'
+    const config1 = `{
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+    const log1 = `{
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    await writeFileAtomic(`${folder}-target.log.json`, log1)
+    await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Follow target repo state by log file: 6 commits'],
+        ['Follow target repo state by number of commits', 'Remove existing repo'],
+    )
+})
+
+test('gitexporter forceReCreateRepo with existing repo', async () => {
+    const folder = 'ignore.force-remove-repo'
+    const config1 = `{
+  "forceReCreateRepo": true,    
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}"
+}`
+    const log1 = `{
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await prepareGitRepo(`${folder}-target`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    await writeFileAtomic(`${folder}-target.log.json`, log1)
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Remove existing repo'],
+        ['Follow target repo state by number of commits', 'Follow target repo state by log file'],
+    )
+    expectStdout(
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
+        ['Remove existing repo'],
+        ['Follow target repo state by number of commits', 'Follow target repo state by log file'],
+    )
+})
+
+test('gitexporter target does not exists with non empty log file commits error', async () => {
+    const folder = 'ignore.error-5'
+    const config1 = `{
+  "forceReCreateRepo": false,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+    const log1 = `{
+  "commits": [
+    {
+      "date": "2010-01-01T22:00:00.000Z",
+      "sha": "c731fd997376f68806c5cbe100edc7000acb75db",
+      "author": {
+        "name": "User",
+        "email": "user@example.com"
+      },
+      "committer": {
+        "name": "Name2",
+        "email": "user2@example.com"
+      },
+      "message": "initial commit\\n",
+      "processing": {
+        "newSha": "2ddd8f9d41399241dec8f4dce64e6365335baa1f",
+        "index": "1/6",
+        "t0": 1639213279236,
+        "tX": 1639213279263,
+        "dt": 12,
+        "paths": 1,
+        "ignoredPaths": 1,
+        "allowedPaths": 1
+      }
+    }
+]    
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    await writeFileAtomic(`${folder}-target.log.json`, log1)
+    try {
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+        expect(true).toBe(false)
+    } catch (e) {
+        expect(e.stderr).toEqual('ERROR: Target repository does not exists but you already have an enable `followByLogFile` feature with existing log file commits! The behavior will be non-deterministic. You can use `forceReCreateRepo` or remove the existing log file\n')
+        expect(e.code).toEqual(7)
+        expect(e.killed).toEqual(false)
+    }
+})
+
+test('gitexporter target repo exists with non empty log file commits error', async () => {
+    const folder = 'ignore.error-6'
+    const config1 = `{
+  "forceReCreateRepo": false,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+    const log1 = `{
+  "commits": [
+    {
+      "date": "2010-01-01T22:00:00.000Z",
+      "sha": "c731fd997376f68806c5cbe100edc7000acb75db",
+      "author": {
+        "name": "User",
+        "email": "user@example.com"
+      },
+      "committer": {
+        "name": "Name2",
+        "email": "user2@example.com"
+      },
+      "message": "initial commit\\n",
+      "processing": {
+        "newSha": "2ddd8f9d41399241dec8f4dce64e6365335baa1f",
+        "index": "1/6",
+        "t0": 1639213279236,
+        "tX": 1639213279263,
+        "dt": 12,
+        "paths": 1,
+        "ignoredPaths": 1,
+        "allowedPaths": 1
+      }
+    }
+]    
+}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    await writeFileAtomic(`${folder}-target.log.json`, log1)
+    try {
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+        expect(true).toBe(false)
+    } catch (e) {
+        expect(e.stderr).toEqual('ERROR: Target repository does not exists but you already have an enable `followByLogFile` feature with existing log file commits! The behavior will be non-deterministic. You can use `forceReCreateRepo` or remove the existing log file\n')
+        expect(e.code).toEqual(7)
+        expect(e.killed).toEqual(false)
+    }
+})
+
+test('gitexporter target repo exists with empty log file commits error', async () => {
+    const folder = 'ignore.error-7'
+    const config1 = `{
+  "forceReCreateRepo": false,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+    const log1 = `{}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await prepareGitRepo(`${folder}-target`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    await writeFileAtomic(`${folder}-target.log.json`, log1)
+    try {
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+        expect(true).toBe(false)
+    } catch (e) {
+        expect(e.stderr).toEqual('ERROR: Your target repo already exits but your log file does not have commits! The behavior will be non-deterministic. Remove existing target repo or use `forceReCreateRepo` or change the `logFilePath`\n')
+        expect(e.code).toEqual(7)
+        expect(e.killed).toEqual(false)
+    }
+})
+
+test('gitexporter target repo exists without follow options error', async () => {
+    const folder = 'ignore.error-8'
+    const config1 = `{
+  "followByLogFile": false,  
+  "followByNumberOfCommits": false,
+  "targetRepoPath": "${folder}-target",
+  "sourceRepoPath": "${folder}",
+  "ignoredPaths": ["test.txt", "*.link"],
+  "allowedPaths": ["*"]
+}`
+    const log1 = `{}`
+
+    await run(`rm -rf ${folder}*`)
+    await prepareGitRepo(`${folder}`)
+    await prepareGitRepo(`${folder}-target`)
+    await writeFileAtomic(`${folder}.config.json`, config1)
+    await writeFileAtomic(`${folder}-target.log.json`, log1)
+    try {
+        await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`)
+        expect(true).toBe(false)
+    } catch (e) {
+        expect(e.stderr).toEqual('ERROR: can\'t use followByLogFile=false and followByNumberOfCommits=false simultaneously. Choose one or use forceReCreateRepo=true\n')
+        expect(e.code).toEqual(8)
+        expect(e.killed).toEqual(false)
+    }
+})

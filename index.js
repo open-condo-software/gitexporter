@@ -285,7 +285,9 @@ async function writeLogData (logFilePath, commits, filePaths, ignoredPaths, allo
 
 async function readLogData (logFilePath) {
     try {
-        return JSON.parse(await fs.promises.readFile(logFilePath))
+        const data = JSON.parse(await fs.promises.readFile(logFilePath))
+        if (!data.commits || !Array.isArray(data.commits)) data.commits = []
+        return data
     } catch (e) {
         return { commits: [] }
     }
@@ -341,12 +343,14 @@ async function readOptions (config, args) {
     const forceReCreateRepo = options.forceReCreateRepo || false
     const syncAllFilesOnLastFollowCommit = options.syncAllFilesOnLastFollowCommit || false
     if (options.followByLogFile && options.followByNumberOfCommits) exit('ERROR: can\'t use followByLogFile=true and followByNumberOfCommits=true simultaneously. Choose one or use forceReCreateRepo=true', 8)
+    if (!forceReCreateRepo && typeof options.followByLogFile !== 'undefined' && typeof options.followByNumberOfCommits !== 'undefined' && !options.followByLogFile && !options.followByNumberOfCommits) exit('ERROR: can\'t use followByLogFile=false and followByNumberOfCommits=false simultaneously. Choose one or use forceReCreateRepo=true', 8)
     const followByNumberOfCommits = (forceReCreateRepo) ? false : (options.followByLogFile) ? false : options.followByNumberOfCommits || false
     const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || (!followByNumberOfCommits)
     const allowedPaths = options.allowedPaths || ['*']
     const ignoredPaths = options.ignoredPaths || []
     let commitTransformer = options.commitTransformer || null
     if (commitTransformer) {
+        if (typeof commitTransformer !== 'string') exit(`ERROR: wrong "commitTransformer" value type. Try to use path related to ${config} file`, 8)
         commitTransformer = requireResolvePaths([
             commitTransformer,
             path.join(config, '..', commitTransformer),
@@ -407,7 +411,7 @@ async function main (config, args) {
             //  3) unpredictable to add new commits is such case!
 
             if (isFollowByLogFileFeatureEnabled) {
-                if (existingLogState.commits.length === 0) exit('ERROR: Config error! You want to follow by log file with zero commits and existing target repo! Remove existing target repo or use `forceReCreateRepo`', 5)
+                if (existingLogState.commits.length === 0) exit('ERROR: Your target repo already exits but your log file does not have commits! The behavior will be non-deterministic. Remove existing target repo or use `forceReCreateRepo` or change the `logFilePath`', 7)
             } else if (isFollowByNumberOfCommits) {
                 // pass
             } else {
@@ -424,7 +428,7 @@ async function main (config, args) {
                     // we don't have commits inside the log and we don't have an existing repo! no need to follow!
                     isFollowByLogFileFeatureEnabled = false
                 } else {
-                    exit('ERROR: Target repository does not exists but you already have an enable `followByLogFile` feature with existing log file commits! The behavior will be non-deterministic. You can use `forceReCreateRepo` or remove the existing log file', 5)
+                    exit('ERROR: Target repository does not exists but you already have an enable `followByLogFile` feature with existing log file commits! The behavior will be non-deterministic. You can use `forceReCreateRepo` or remove the existing log file', 7)
                 }
             } else if (isFollowByNumberOfCommits) {
                 // it's ok! no repo no number of commits! no need to follow!
