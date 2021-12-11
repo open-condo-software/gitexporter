@@ -1,6 +1,6 @@
 {
   "name": "gitexporter",
-  "version": "1.4.2",
+  "version": "1.5.1",
   "description": "Utility for exporting private git repository commits to a open source public repository",
   "main": "index.js",
   "scripts": {

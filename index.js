@@ -340,8 +340,9 @@ async function readOptions (config, args) {
     const logFilePath = options.logFilePath || targetRepoPath + '.log.json'
     const forceReCreateRepo = options.forceReCreateRepo || false
     const syncAllFilesOnLastFollowCommit = options.syncAllFilesOnLastFollowCommit || false
+    if (options.followByLogFile && options.followByNumberOfCommits) exit('ERROR: can\'t use followByLogFile=true and followByNumberOfCommits=true simultaneously. Choose one or use forceReCreateRepo=true', 8)
     const followByNumberOfCommits = (forceReCreateRepo) ? false : (options.followByLogFile) ? false : options.followByNumberOfCommits || false
-    const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || ((!followByNumberOfCommits))
+    const followByLogFile = (forceReCreateRepo) ? false : options.followByLogFile || (!followByNumberOfCommits)
     const allowedPaths = options.allowedPaths || ['*']
     const ignoredPaths = options.ignoredPaths || []
     let commitTransformer = options.commitTransformer || null
@@ -351,7 +352,7 @@ async function readOptions (config, args) {
             path.join(config, '..', commitTransformer),
             path.join(process.cwd(), commitTransformer),
         ])
-        if (!commitTransformer) exit(`ERROR: can't import "commitTransformer" module. Try to use path related to ${config} file`)
+        if (!commitTransformer) exit(`ERROR: can't import "commitTransformer" module. Try to use path related to ${config} file`, 8)
         commitTransformer = require(commitTransformer)
     }
     return {
@@ -523,6 +524,8 @@ async function main (config, args) {
                 continue
             } else {
                 isFollowByOk = false
+                if (!lastFollowCommit) exit('ERROR: Does not find any log commit! Try to use `forceReCreateRepo` mode or remove target repo!', 2)
+                await checkout(targetRepo, lastFollowCommit)
                 if (options.syncAllFilesOnLastFollowCommit) syncTreeCommitIndex = commitIndex
                 console.log(`Follow log stopped! last commit ${commitIndex}/${commitLength} ${lastFollowCommit}`)
             }
@@ -552,6 +555,22 @@ async function main (config, args) {
                 }
                 return isOk
             })
+
+        if (commitIndex === syncTreeCommitIndex && lastFollowCommit) {
+            // want to `git rm` all existing files if the config.json was changed!
+            const targetFiles = await getTreeFiles(targetRepo, lastFollowCommit)
+            const sourcePaths = new Set(files.map((x) => x.path))
+            targetFiles.forEach((targetFile) => {
+                if (!sourcePaths.has(targetFile.path)) {
+                    files.push({
+                        filemode: 0,
+                        type: -1,
+                        path: targetFile.path,
+                        entry: undefined,
+                    })
+                }
+            })
+        }
 
         if (options.commitTransformer) await options.commitTransformer(commit, files)
 
