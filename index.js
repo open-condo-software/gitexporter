@@ -474,6 +474,7 @@ async function main (config, args) {
     let allowedPathsLength = 0
     let isFollowByOk = true
     let lastFollowCommit = null
+    let lastTargetCommit = null
     let syncTreeCommitIndex = -1
     const filePaths = ((isFollowByLogFileFeatureEnabled || isFollowByNumberOfCommits) && existingLogState.paths) ? new Set(existingLogState.paths) : new Set()
     const ignoredPaths = ((isFollowByLogFileFeatureEnabled || isFollowByNumberOfCommits) && existingLogState.ignoredPaths) ? new Set(existingLogState.ignoredPaths) : new Set()
@@ -492,6 +493,7 @@ async function main (config, args) {
                 const hasSourceCommit = await hasCommit(sourceRepo, sha)
                 if (hasTargetCommit && hasSourceCommit) {
                     lastFollowCommit = newSha
+                    lastTargetCommit = newSha
                     // we also need to update commit.processing data
                     commit.processing = existingCommit.processing
                     continue
@@ -522,9 +524,9 @@ async function main (config, args) {
                         index: `${commitIndex}/${commitLength}`,
                     }
                 }
-                if (commit.processing.newSha !== targetCommit.sha) console.warn(`WARN: log file commit sha ${commit.processing.newSha} != target commit sha ${targetCommit.sha}`)
                 commit.processing.newSha = targetCommit.sha
                 lastFollowCommit = targetCommit.sha
+                lastTargetCommit = targetCommit.sha
                 continue
             } else {
                 isFollowByOk = false
@@ -580,6 +582,7 @@ async function main (config, args) {
 
         await reWriteFilesInRepo(options.targetRepoPath, files)
         const newSha = await commitFiles(targetRepo, commit.author, commit.committer, commit.message, files)
+        lastTargetCommit = newSha
 
         time1 = time2
         time2 = Date.now()
@@ -601,6 +604,10 @@ async function main (config, args) {
     }
 
     await writeLogData(options.logFilePath, commits, filePaths, ignoredPaths, allowedPaths, skippedPaths)
+    if (lastTargetCommit) {
+        await checkout(targetRepo, lastTargetCommit)
+        console.log(`Checkout: ${lastTargetCommit}`)
+    }
     if (isFollowByOk && (isFollowByLogFileFeatureEnabled || isFollowByNumberOfCommits)) console.log('Follow log stopped! last commit', commitIndex, lastFollowCommit)
     console.log((options.dontShowTiming) ? 'Finish' : `Finish: total=${Date.now() - time0}ms;`)
 }

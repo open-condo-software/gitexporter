@@ -445,7 +445,7 @@ test('gitexporter follow by logfile', async () => {
     await writeFileAtomic(`${folder}.config.json`, config)
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish'],
+        ['Finish', 'Checkout: 46c01f27346ad1e77ffcc81e38b914ea17ae0395'],
         ['Follow target repo state', 'Follow log stopped'],
     )
 
@@ -464,7 +464,7 @@ test('gitexporter follow by logfile', async () => {
 
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by log file: 6 commits', 'Follow log stopped! last commit 7/7 46c01f27346ad1e77ffcc81e38b914ea17ae0395'],
+        ['Finish', 'Follow target repo state by log file: 6 commits', 'Follow log stopped! last commit 7/7 46c01f27346ad1e77ffcc81e38b914ea17ae0395', 'Checkout: 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
     )
     expectLogPath(
         `${folder}-target.log.json`,
@@ -479,15 +479,15 @@ test('gitexporter follow by logfile', async () => {
 
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330', 'Checkout: 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
     )
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330', 'Checkout: 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
     )
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['Finish', 'Follow target repo state by log file: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330', 'Checkout: 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
     )
 
     expectLogPath(
@@ -587,7 +587,7 @@ test('gitexporter follow by number of commits', async () => {
     await writeFileAtomic(`${folder}.config.json`, config)
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish'],
+        ['Finish', 'Checkout: 46c01f27346ad1e77ffcc81e38b914ea17ae0395'],
         ['WARN', 'Follow target repo state', 'Follow log stopped'],
     )
 
@@ -606,7 +606,7 @@ test('gitexporter follow by number of commits', async () => {
 
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by number of commits: 6 commits', 'Follow log stopped! last commit 7/7 46c01f27346ad1e77ffcc81e38b914ea17ae0395'],
+        ['Finish', 'Follow target repo state by number of commits: 6 commits', 'Follow log stopped! last commit 7/7 46c01f27346ad1e77ffcc81e38b914ea17ae0395', 'Checkout: 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
         ['WARN'],
     )
     expectLogPath(
@@ -622,17 +622,17 @@ test('gitexporter follow by number of commits', async () => {
 
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330', 'Checkout: 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
         ['WARN'],
     )
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330', 'Checkout: 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
         ['WARN'],
     )
     expectStdout(
         await run(`node --unhandled-rejections=strict index.js ${folder}.config.json`),
-        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
+        ['Finish', 'Follow target repo state by number of commits: 7 commits', 'Follow log stopped! last commit 7 95655d5bd61e5d8c71acde522f28c0d46fb17330', 'Checkout: 95655d5bd61e5d8c71acde522f28c0d46fb17330'],
         ['WARN'],
     )
 
