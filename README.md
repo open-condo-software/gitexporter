@@ -101,11 +101,6 @@ fi
 SOURCE_FOLDER=$1
 TARGET_FOLDER=$2
 
-echo "[SOURCE/CLONE/PULL]"
-if [ -d ${SOURCE_FOLDER} ]; then git -C ${SOURCE_FOLDER} pull origin master; else echo "<source-git-repo> not found!: ${SOURCE_FOLDER}"; exit 3; fi
-echo "[TARGET/CLONE/PULL]"
-if [ -d ${TARGET_FOLDER} ]; then git -C ${TARGET_FOLDER} pull origin master; else echo "<target-git-repo> not found!: ${TARGET_FOLDER}"; exit 3; fi
-
 echo "[GITEXPORTER]"
 cat > ${SOURCE_FOLDER}.config.json <<EOF
 {
