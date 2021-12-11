@@ -519,6 +519,7 @@ async function main (config, args) {
                 const existingLogCommit = existingLogState.commits[commitIndex - 1]
                 if (existingLogCommit && existingLogCommit.processing) {
                     commit.processing = existingLogCommit.processing
+                    if (commit.processing.newSha !== targetCommit.sha) console.warn(`WARN: log file commit sha ${commit.processing.newSha} != target commit sha ${targetCommit.sha}`)
                 } else {
                     commit.processing = {
                         index: `${commitIndex}/${commitLength}`,
