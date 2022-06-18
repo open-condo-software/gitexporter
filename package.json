@@ -20,6 +20,6 @@
     "write-file-atomic": "^3.0.3"
   },
   "devDependencies": {
-    "jest": "27.4.7"
+    "jest": "28.1.1"
   }
 }
